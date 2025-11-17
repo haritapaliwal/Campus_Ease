@@ -1,0 +1,40 @@
+import mongoose from "mongoose";
+
+const laundryBookingSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    shopId: { type: mongoose.Schema.Types.ObjectId, ref: "Shop" },
+    slot: { type: String }, // Keep for backward compatibility
+    status: { type: String, default: "booked" },
+    deliveredAt: { type: Date },
+    // New order fields
+    items: {
+      washFold: {
+        tshirt: { type: Number, default: 0 },
+        pant: { type: Number, default: 0 },
+        shirt: { type: Number, default: 0 },
+        jacket: { type: Number, default: 0 },
+      },
+      dryClean: {
+        suit: { type: Number, default: 0 },
+        blazer: { type: Number, default: 0 },
+        dress: { type: Number, default: 0 },
+        coat: { type: Number, default: 0 },
+      },
+      ironing: {
+        shirt: { type: Number, default: 0 },
+        pant: { type: Number, default: 0 },
+        kurta: { type: Number, default: 0 },
+        saree: { type: Number, default: 0 },
+      },
+    },
+    pickupDate: { type: String },
+    pickupTime: { type: String },
+    deliveryOption: { type: String, default: "standard" }, // "standard" or "express"
+    serviceType: { type: String, default: "laundry" }, // "laundry", "dryclean", "iron"
+    totalAmount: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+);
+
+export default mongoose.model("LaundryBooking", laundryBookingSchema);

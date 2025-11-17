@@ -1,0 +1,25 @@
+{
+  "name": "canteen-portal",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["client"],
+  "scripts": {
+    "start:server": "node server/server.js",
+    "dev:server": "nodemon server/server.js",
+    "start:client": "npm --prefix client run dev",
+    "build:client": "npm --prefix client run build",
+    "dev": "concurrently \"npm run dev:server\" \"npm run start:client\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mongoose": "^8.6.3"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "nodemon": "^3.1.4"
+  }
+}
+
+
