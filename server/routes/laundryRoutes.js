@@ -5,9 +5,6 @@ import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Example static slots
-const laundrySlots = ["9:00 AM", "11:00 AM", "1:00 PM", "3:00 PM", "5:00 PM"];
-
 // Get all laundry shops
 router.get("/shops", async (req, res) => {
   const shops = await Shop.find({ type: "laundry" }); // add `type` field to Shop schema if needed
@@ -16,58 +13,60 @@ router.get("/shops", async (req, res) => {
 
 // Book laundry slot
 router.post("/book", authMiddleware, async (req, res) => {
-  const { shopId, slot, items, pickupDate, pickupTime, deliveryOption, serviceType } = req.body;
+  const { shopId, items, pickupDate, pickupTime, deliveryOption, serviceType } = req.body;
   try {
-    // Support both old format (slot only) and new format (items-based order)
-    if (!slot && !items) {
-      return res.status(400).json({ message: "Slot or items are required" });
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "At least one laundry item is required" });
     }
 
-    // Calculate total amount if items are provided
+    const shop = shopId
+      ? await Shop.findById(shopId)
+      : await Shop.findOne({ type: "laundry" });
+
+    if (!shop) {
+      return res.status(404).json({ message: "Laundry shop not found" });
+    }
+
+    const catalogMap = new Map();
+    ["laundry", "dryclean", "iron"].forEach((cat) => {
+      (shop.laundryCatalog?.[cat] || []).forEach((entry) => {
+        catalogMap.set(String(entry._id), { ...entry.toObject(), category: cat });
+      });
+    });
+
     let totalAmount = 0;
-    if (items) {
-      // Laundry (Wash & Fold) pricing
-      if (items.washFold) {
-        const prices = { tshirt: 20, pant: 30, shirt: 40, jacket: 50 };
-        Object.entries(items.washFold).forEach(([item, qty]) => {
-          totalAmount += (prices[item] || 0) * (qty || 0);
-        });
-      }
-      // Dry Clean pricing
-      if (items.dryClean) {
-        const prices = { suit: 150, blazer: 120, dress: 100, coat: 180 };
-        Object.entries(items.dryClean).forEach(([item, qty]) => {
-          totalAmount += (prices[item] || 0) * (qty || 0);
-        });
-      }
-      // Ironing pricing
-      if (items.ironing) {
-        const prices = { shirt: 15, pant: 20, kurta: 25, saree: 30 };
-        Object.entries(items.ironing).forEach(([item, qty]) => {
-          totalAmount += (prices[item] || 0) * (qty || 0);
-        });
-      }
-      if (deliveryOption === "express") {
-        totalAmount += 25;
-      }
+    const normalizedItems = [];
+
+    items.forEach((line) => {
+      const entry = catalogMap.get(String(line.itemId));
+      const qty = Number(line.quantity) || 0;
+      if (!entry || qty <= 0) return;
+      normalizedItems.push({
+        itemId: entry._id,
+        name: entry.name,
+        category: entry.category,
+        quantity: qty,
+        price: entry.price,
+      });
+      totalAmount += entry.price * qty;
+    });
+
+    if (normalizedItems.length === 0) {
+      return res.status(400).json({ message: "Valid laundry items are required" });
     }
 
-    // For backward compatibility, check slot uniqueness if slot is provided
-    if (slot) {
-      const query = shopId ? { shopId, slot } : { slot };
-      const existing = await LaundryBooking.findOne(query);
-      if (existing) return res.status(400).json({ message: "Slot already booked" });
+    if (deliveryOption === "express") {
+      totalAmount += 25;
     }
 
     const booking = await LaundryBooking.create({
       userId: req.user,
-      shopId: shopId || undefined,
-      slot: slot || `${pickupDate} ${pickupTime}`,
-      items: items || undefined,
+      shopId: shop._id,
+      items: normalizedItems,
       pickupDate: pickupDate || undefined,
       pickupTime: pickupTime || undefined,
       deliveryOption: deliveryOption || "standard",
-      serviceType: serviceType || "laundry",
+      serviceType: serviceType || normalizedItems[0].category || "laundry",
       totalAmount,
     });
     
@@ -79,9 +78,13 @@ router.post("/book", authMiddleware, async (req, res) => {
   }
 });
 
-// Get user's laundry bookings
+// Get user's laundry bookings (last 24 hours only for customer "My Bookings" view)
 router.get("/my-bookings", authMiddleware, async (req, res) => {
-  const bookings = await LaundryBooking.find({ userId: req.user }).populate("shopId");
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const bookings = await LaundryBooking.find({
+    userId: req.user,
+    createdAt: { $gte: since },
+  }).populate("shopId");
   res.json(bookings);
 });
 

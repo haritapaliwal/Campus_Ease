@@ -7,6 +7,7 @@ import LaundryBooking from "../models/LaundryBooking.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
+const laundryCategories = ["laundry", "dryclean", "iron"];
 
 // Middleware to ensure the user is an owner and owns the shop
 async function ownerGuard(req, res, next) {
@@ -68,6 +69,64 @@ router.post("/shops/:shopId/slots", authMiddleware, ownerGuard, async (req, res)
   res.json(req.shop);
 });
 
+// Manage laundry catalog items
+router.post("/shops/:shopId/laundry/catalog", authMiddleware, ownerGuard, async (req, res) => {
+  const { category, name, price } = req.body;
+  if (!laundryCategories.includes(category)) {
+    return res.status(400).json({ message: "Invalid laundry category" });
+  }
+  if (!name || price == null) {
+    return res.status(400).json({ message: "name and price are required" });
+  }
+  req.shop.laundryCatalog = req.shop.laundryCatalog || { laundry: [], dryclean: [], iron: [] };
+  req.shop.laundryCatalog[category].push({ name, price: Number(price) });
+  await req.shop.save();
+  res.json(req.shop.laundryCatalog);
+});
+
+router.put("/shops/:shopId/laundry/catalog/:itemId", authMiddleware, ownerGuard, async (req, res) => {
+  const { itemId } = req.params;
+  const { name, price } = req.body;
+  if (!name && price == null) {
+    return res.status(400).json({ message: "Nothing to update" });
+  }
+  req.shop.laundryCatalog = req.shop.laundryCatalog || { laundry: [], dryclean: [], iron: [] };
+  let updated = null;
+  laundryCategories.forEach((cat) => {
+    const list = req.shop.laundryCatalog[cat] || [];
+    const idx = list.findIndex((item) => String(item._id) === itemId);
+    if (idx !== -1) {
+      if (name) list[idx].name = name;
+      if (price != null) list[idx].price = Number(price);
+      updated = list[idx];
+    }
+  });
+  if (!updated) {
+    return res.status(404).json({ message: "Laundry item not found" });
+  }
+  await req.shop.save();
+  res.json(updated);
+});
+
+router.delete("/shops/:shopId/laundry/catalog/:itemId", authMiddleware, ownerGuard, async (req, res) => {
+  const { itemId } = req.params;
+  req.shop.laundryCatalog = req.shop.laundryCatalog || { laundry: [], dryclean: [], iron: [] };
+  let removed = false;
+  laundryCategories.forEach((cat) => {
+    const list = req.shop.laundryCatalog[cat] || [];
+    const newList = list.filter((item) => String(item._id) !== itemId);
+    if (newList.length !== list.length) {
+      req.shop.laundryCatalog[cat] = newList;
+      removed = true;
+    }
+  });
+  if (!removed) {
+    return res.status(404).json({ message: "Laundry item not found" });
+  }
+  await req.shop.save();
+  res.json({ success: true });
+});
+
 // Toggle slot status (bookable/not bookable)
 router.put("/shops/:shopId/slots/:slotTime", authMiddleware, ownerGuard, async (req, res) => {
   let { slotTime } = req.params;
@@ -100,17 +159,37 @@ router.put("/shops/:shopId/slots/:slotTime", authMiddleware, ownerGuard, async (
 
 // View bookings for my shop
 router.get("/shops/:shopId/bookings", authMiddleware, ownerGuard, async (req, res) => {
+  // Show only recent (last ~24 hours) bookings/orders for each shop
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
   if (req.shop.type === "canteen") {
     // Show orders that contain items from this shop by shop name
-    const orders = await Order.find({ "items.shop": req.shop.name }).sort({ createdAt: -1 });
+    const orders = await Order.find({
+      "items.shop": req.shop.name,
+      status: { $ne: "cancelled" },
+      createdAt: { $gte: since },
+    })
+      .sort({ createdAt: -1 })
+      .populate("userId", "studentId email");
     return res.json(orders);
   }
   if (req.shop.type === "barber") {
-    const bookings = await BarberBooking.find().sort({ createdAt: -1 });
+    const bookings = await BarberBooking.find({
+      status: { $ne: "cancelled" },
+      createdAt: { $gte: since },
+    })
+      .sort({ createdAt: -1 })
+      .populate("userId", "studentId email");
     return res.json(bookings);
   }
   if (req.shop.type === "laundry") {
-    const bookings = await LaundryBooking.find({ shopId: req.shop._id }).sort({ createdAt: -1 });
+    const bookings = await LaundryBooking.find({
+      shopId: req.shop._id,
+      status: { $ne: "cancelled" },
+      createdAt: { $gte: since },
+    })
+      .sort({ createdAt: -1 })
+      .populate("userId", "studentId email");
     return res.json(bookings);
   }
   res.json([]);

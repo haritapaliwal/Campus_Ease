@@ -8,26 +8,15 @@ const laundryBookingSchema = new mongoose.Schema(
     status: { type: String, default: "booked" },
     deliveredAt: { type: Date },
     // New order fields
-    items: {
-      washFold: {
-        tshirt: { type: Number, default: 0 },
-        pant: { type: Number, default: 0 },
-        shirt: { type: Number, default: 0 },
-        jacket: { type: Number, default: 0 },
+    items: [
+      {
+        itemId: { type: mongoose.Schema.Types.ObjectId },
+        name: String,
+        category: { type: String, enum: ["laundry", "dryclean", "iron"] },
+        quantity: { type: Number, default: 0 },
+        price: { type: Number, default: 0 },
       },
-      dryClean: {
-        suit: { type: Number, default: 0 },
-        blazer: { type: Number, default: 0 },
-        dress: { type: Number, default: 0 },
-        coat: { type: Number, default: 0 },
-      },
-      ironing: {
-        shirt: { type: Number, default: 0 },
-        pant: { type: Number, default: 0 },
-        kurta: { type: Number, default: 0 },
-        saree: { type: Number, default: 0 },
-      },
-    },
+    ],
     pickupDate: { type: String },
     pickupTime: { type: String },
     deliveryOption: { type: String, default: "standard" }, // "standard" or "express"
