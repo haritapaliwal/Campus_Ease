@@ -22,7 +22,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "chmod +x node_modules/.bin/vite && vite build",
+    "build": "vite build", 
+    "postinstall": "find node_modules/.bin -type f -exec chmod +x {} \\;",
     "preview": "vite preview"
   }
 }
