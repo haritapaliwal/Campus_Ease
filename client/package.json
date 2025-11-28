@@ -23,7 +23,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build", 
-    "postinstall": "find node_modules/.bin -type f -exec chmod +x {} \\;",
     "preview": "vite preview"
   }
 }
