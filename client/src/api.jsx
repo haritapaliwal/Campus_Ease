@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:5000/api", // change to deployed URL later
+  baseURL: "https://campus-ease-yg63.onrender.com", // change to deployed URL later
 });
 
 api.interceptors.request.use((config) => {
