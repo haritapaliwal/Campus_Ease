@@ -12,11 +12,7 @@ if (rawApiUrl) {
 }
 
 const api = axios.create({
-<<<<<<< HEAD
   baseURL,
-=======
-  baseURL: "https://campus-ease-yg63.onrender.com", // change to deployed URL later
->>>>>>> d4e9654bbd7f18ef1d14fcb7bb7c830e83810b4d
 });
 
 api.interceptors.request.use((config) => {
