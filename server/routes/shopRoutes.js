@@ -4,9 +4,10 @@ import User from "../models/User.js";
 import Order from "../models/Order.js";
 import BarberBooking from "../models/BarberBooking.js";
 import LaundryBooking from "../models/LaundryBooking.js";
-import authMiddleware from "../middleware/authMiddleware.js";
+import authMiddleware, { authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
+router.use(authMiddleware, authorizeRoles("shop_owner"));
 const laundryCategories = ["laundry", "dryclean", "iron"];
 
 // Middleware to ensure the user is an owner and owns the shop
@@ -28,7 +29,7 @@ async function ownerGuard(req, res, next) {
 }
 
 // Get my shop info
-router.get("/my-shop", authMiddleware, async (req, res) => {
+router.get("/my-shop", async (req, res) => {
   let shop = await Shop.findOne({ ownerId: req.user });
   if (!shop) {
     // Fallback: use user's shopId if linked
@@ -41,12 +42,12 @@ router.get("/my-shop", authMiddleware, async (req, res) => {
 });
 
 // Get a specific shop by id (owner only)
-router.get("/shops/:shopId", authMiddleware, ownerGuard, async (req, res) => {
+router.get("/shops/:shopId", ownerGuard, async (req, res) => {
   res.json(req.shop);
 });
 
 // Add menu item (canteen)
-router.post("/shops/:shopId/menu", authMiddleware, ownerGuard, async (req, res) => {
+router.post("/shops/:shopId/menu", ownerGuard, async (req, res) => {
   const { item, price } = req.body;
   if (!item || price == null) return res.status(400).json({ message: "item and price are required" });
   req.shop.menu = req.shop.menu || [];
@@ -56,7 +57,7 @@ router.post("/shops/:shopId/menu", authMiddleware, ownerGuard, async (req, res) 
 });
 
 // Add time slot (barber/laundry)
-router.post("/shops/:shopId/slots", authMiddleware, ownerGuard, async (req, res) => {
+router.post("/shops/:shopId/slots", ownerGuard, async (req, res) => {
   const { slot } = req.body;
   if (!slot) return res.status(400).json({ message: "slot is required" });
   req.shop.slots = req.shop.slots || [];
@@ -70,7 +71,7 @@ router.post("/shops/:shopId/slots", authMiddleware, ownerGuard, async (req, res)
 });
 
 // Manage laundry catalog items
-router.post("/shops/:shopId/laundry/catalog", authMiddleware, ownerGuard, async (req, res) => {
+router.post("/shops/:shopId/laundry/catalog", ownerGuard, async (req, res) => {
   const { category, name, price } = req.body;
   if (!laundryCategories.includes(category)) {
     return res.status(400).json({ message: "Invalid laundry category" });
@@ -84,7 +85,7 @@ router.post("/shops/:shopId/laundry/catalog", authMiddleware, ownerGuard, async 
   res.json(req.shop.laundryCatalog);
 });
 
-router.put("/shops/:shopId/laundry/catalog/:itemId", authMiddleware, ownerGuard, async (req, res) => {
+router.put("/shops/:shopId/laundry/catalog/:itemId", ownerGuard, async (req, res) => {
   const { itemId } = req.params;
   const { name, price } = req.body;
   if (!name && price == null) {
@@ -108,7 +109,7 @@ router.put("/shops/:shopId/laundry/catalog/:itemId", authMiddleware, ownerGuard,
   res.json(updated);
 });
 
-router.delete("/shops/:shopId/laundry/catalog/:itemId", authMiddleware, ownerGuard, async (req, res) => {
+router.delete("/shops/:shopId/laundry/catalog/:itemId", ownerGuard, async (req, res) => {
   const { itemId } = req.params;
   req.shop.laundryCatalog = req.shop.laundryCatalog || { laundry: [], dryclean: [], iron: [] };
   let removed = false;
@@ -128,7 +129,7 @@ router.delete("/shops/:shopId/laundry/catalog/:itemId", authMiddleware, ownerGua
 });
 
 // Toggle slot status (bookable/not bookable)
-router.put("/shops/:shopId/slots/:slotTime", authMiddleware, ownerGuard, async (req, res) => {
+router.put("/shops/:shopId/slots/:slotTime", ownerGuard, async (req, res) => {
   let { slotTime } = req.params;
   slotTime = decodeURIComponent(slotTime); // Decode URL-encoded slot time
   const { isBookable } = req.body;
@@ -158,14 +159,17 @@ router.put("/shops/:shopId/slots/:slotTime", authMiddleware, ownerGuard, async (
 });
 
 // View bookings for my shop
-router.get("/shops/:shopId/bookings", authMiddleware, ownerGuard, async (req, res) => {
+router.get("/shops/:shopId/bookings", ownerGuard, async (req, res) => {
   // Show only recent (last ~24 hours) bookings/orders for each shop
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  if (req.shop.type === "canteen") {
-    // Show orders that contain items from this shop by shop name
+  if (req.shop.category === "canteen") {
+    // Show orders that contain items from this shop by shop name or shopId
     const orders = await Order.find({
-      "items.shop": req.shop.name,
+      $or: [
+        { shopId: req.shop._id },
+        { "items.shop": req.shop.name }
+      ],
       status: { $ne: "cancelled" },
       createdAt: { $gte: since },
     })
@@ -173,8 +177,9 @@ router.get("/shops/:shopId/bookings", authMiddleware, ownerGuard, async (req, re
       .populate("userId", "studentId email");
     return res.json(orders);
   }
-  if (req.shop.type === "barber") {
+  if (req.shop.category === "barber") {
     const bookings = await BarberBooking.find({
+      shopId: req.shop._id,
       status: { $ne: "cancelled" },
       createdAt: { $gte: since },
     })
@@ -182,7 +187,7 @@ router.get("/shops/:shopId/bookings", authMiddleware, ownerGuard, async (req, re
       .populate("userId", "studentId email");
     return res.json(bookings);
   }
-  if (req.shop.type === "laundry") {
+  if (req.shop.category === "laundry") {
     const bookings = await LaundryBooking.find({
       shopId: req.shop._id,
       status: { $ne: "cancelled" },
@@ -196,7 +201,7 @@ router.get("/shops/:shopId/bookings", authMiddleware, ownerGuard, async (req, re
 });
 
 // Update FOOD order status (accepted | rejected | prepared | completed)
-router.put("/shops/:shopId/orders/:orderId", authMiddleware, ownerGuard, async (req, res) => {
+router.put("/shops/:shopId/orders/:orderId", ownerGuard, async (req, res) => {
   const { orderId } = req.params;
   const { status } = req.body;
   if (!status) return res.status(400).json({ message: "status required" });
@@ -210,7 +215,7 @@ router.put("/shops/:shopId/orders/:orderId", authMiddleware, ownerGuard, async (
 });
 
 // Update BARBER booking status (accepted | rejected | completed)
-router.put("/shops/:shopId/barber/:id", authMiddleware, ownerGuard, async (req, res) => {
+router.put("/shops/:shopId/barber/:id", ownerGuard, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   if (!status) return res.status(400).json({ message: "status required" });
@@ -223,7 +228,7 @@ router.put("/shops/:shopId/barber/:id", authMiddleware, ownerGuard, async (req, 
 });
 
 // Update LAUNDRY booking status (accepted | rejected | completed)
-router.put("/shops/:shopId/laundry/:id", authMiddleware, ownerGuard, async (req, res) => {
+router.put("/shops/:shopId/laundry/:id", ownerGuard, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   if (!status) return res.status(400).json({ message: "status required" });
@@ -233,6 +238,26 @@ router.put("/shops/:shopId/laundry/:id", authMiddleware, ownerGuard, async (req,
   if (status === "completed") booking.deliveredAt = new Date();
   await booking.save();
   res.json(booking);
+});
+
+// Delete canteen menu item
+router.delete("/shops/:shopId/menu/:itemId", ownerGuard, async (req, res) => {
+  const { itemId } = req.params;
+  req.shop.menu = (req.shop.menu || []).filter(m => String(m._id) !== itemId);
+  await req.shop.save();
+  res.json(req.shop);
+});
+
+// Delete barber/laundry slot
+router.delete("/shops/:shopId/slots/:slotTime", ownerGuard, async (req, res) => {
+  let { slotTime } = req.params;
+  slotTime = decodeURIComponent(slotTime);
+  req.shop.slots = (req.shop.slots || []).filter(s => {
+    const time = typeof s === 'string' ? s : s.time;
+    return time !== slotTime;
+  });
+  await req.shop.save();
+  res.json(req.shop);
 });
 
 export default router;

@@ -7,8 +7,9 @@ if (rawApiUrl) {
   const trimmed = String(rawApiUrl).replace(/\/+$/, ""); // remove trailing slashes
   baseURL = trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
 } else {
-  // Fallback to your deployed backend to keep the frontend functional even if VITE_API_URL is not set
-  baseURL = "https://campus-ease-backend-5bmb.onrender.com/api";
+  // Fallback to local server for testing purposes if VITE_API_URL is missing
+  baseURL = "http://localhost:5000/api";
+  // To test production, use: baseURL = "https://campus-ease-backend-5bmb.onrender.com/api";
 }
 
 const api = axios.create({

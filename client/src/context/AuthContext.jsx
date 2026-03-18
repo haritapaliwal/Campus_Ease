@@ -4,14 +4,14 @@ export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem("token"));
-  const [role, setRole] = useState(localStorage.getItem("role") || "student");
+  const [role, setRole] = useState(localStorage.getItem("role") || "customer");
   const [shopId, setShopId] = useState(localStorage.getItem("shopId") || null);
 
   // Sync with localStorage changes (e.g., from other tabs or after token removal)
   useEffect(() => {
     const handleStorageChange = () => {
       const storedToken = localStorage.getItem("token");
-      const storedRole = localStorage.getItem("role") || "student";
+      const storedRole = localStorage.getItem("role") || "customer";
       const storedShopId = localStorage.getItem("shopId");
       
       if (storedToken !== token) {
@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, [token, role, shopId]);
 
-  const login = (jwt, userRole = "student", userShopId = null) => {
+  const login = (jwt, userRole = "customer", userShopId = null) => {
     setToken(jwt);
     setRole(userRole);
     setShopId(userShopId);
@@ -41,7 +41,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     setToken(null);
-    setRole("student");
+    setRole("customer");
     setShopId(null);
     localStorage.removeItem("token");
     localStorage.removeItem("role");
@@ -51,7 +51,7 @@ export const AuthProvider = ({ children }) => {
   // Method to refresh token from localStorage (useful when token is cleared externally)
   const refreshToken = () => {
     const storedToken = localStorage.getItem("token");
-    const storedRole = localStorage.getItem("role") || "student";
+    const storedRole = localStorage.getItem("role") || "customer";
     const storedShopId = localStorage.getItem("shopId");
     
     setToken(storedToken);

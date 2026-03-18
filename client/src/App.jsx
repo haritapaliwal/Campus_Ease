@@ -13,7 +13,8 @@ import FoodPage from "./pages/FoodPage.jsx";
 import BarberPage from "./pages/BarberPage.jsx";
 import LaundryPage from "./pages/LaundryPage.jsx";
 import MyBookings from "./pages/MyBookings.jsx";
-import OwnerDashboard from "./pages/admin/OwnerDashboard.jsx";
+import ShopOwnerDashboard from "./pages/shopOwner/ShopOwnerDashboard.jsx";
+import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 
 export default function App() {
   return (
@@ -26,25 +27,33 @@ export default function App() {
           <Route path="/signup" element={<SignupPage />} />
 
           {/* Public Routes */}
-          <Route path="/" element={<StudentOnly><HomePage /></StudentOnly>} />
-          <Route path="/food" element={<StudentOnly><FoodPage /></StudentOnly>} />
-          <Route path="/barber" element={<StudentOnly><BarberPage /></StudentOnly>} />
-          <Route path="/laundry" element={<StudentOnly><LaundryPage /></StudentOnly>} />
+          <Route path="/" element={<CustomerOnly><HomePage /></CustomerOnly>} />
+          <Route path="/food" element={<CustomerOnly><FoodPage /></CustomerOnly>} />
+          <Route path="/barber" element={<CustomerOnly><BarberPage /></CustomerOnly>} />
+          <Route path="/laundry" element={<CustomerOnly><LaundryPage /></CustomerOnly>} />
 
           {/* Protected Routes */}
           <Route
             path="/my-bookings"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["customer"]}>
                 <MyBookings />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/owner"
+            path="/shop-owner"
             element={
-              <ProtectedRoute requireOwner>
-                <OwnerDashboard />
+              <ProtectedRoute allowedRoles={["shop_owner"]}>
+                <ShopOwnerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminDashboard />
               </ProtectedRoute>
             }
           />
@@ -55,9 +64,10 @@ export default function App() {
 }
 
 
-function StudentOnly({ children }) {
+function CustomerOnly({ children }) {
   const { role } = useContext(AuthContext);
-  const effectiveRole = role || localStorage.getItem("role") || "student";
-  if (effectiveRole === "owner") return <Navigate to="/owner" />;
+  const effectiveRole = role || localStorage.getItem("role") || "customer";
+  if (effectiveRole === "shop_owner") return <Navigate to="/shop-owner" replace />;
+  if (effectiveRole === "admin") return <Navigate to="/admin" replace />;
   return children;
 }

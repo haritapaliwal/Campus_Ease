@@ -1,0 +1,1 @@
+[{"name":"ac-s7rwnl9-shard-00-02.wd0mbc2.mongodb.net","port":27017,"priority":0,"weight":0},{"name":"ac-s7rwnl9-shard-00-01.wd0mbc2.mongodb.net","port":27017,"priority":0,"weight":0},{"name":"ac-s7rwnl9-shard-00-00.wd0mbc2.mongodb.net","port":27017,"priority":0,"weight":0}]

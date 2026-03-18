@@ -47,19 +47,19 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       const res = await api.post("/auth/login", { email, password });
-      // If the credentials correspond to an owner but user selected "customer", block admin login
-      if (res.data.role === "owner" && userType !== "owner") {
-        // Mimic invalid credentials to avoid exposing owner access without explicit intent
+      // Strict Role-Matching:
+      // If the role returned doesn't match the selected userType, block the login.
+      if (res.data.role !== userType) {
         setErrors({ 
-          email: "Invalid email or password", 
-          password: "Invalid email or password" 
+          email: "Invalid email or password for selected role", 
+          password: "Invalid email or password for selected role" 
         });
-        toast.error("Invalid email or password");
+        toast.error("Role mismatch. Please select the correct login type.");
         return;
       }
-      
-      // If user selected "owner" but credentials are for a customer, block login
-      if (res.data.role === "student" && userType === "owner") {
+
+      // If user selected "admin" but credentials are not for an admin, block login
+      if (res.data.role !== "admin" && userType === "admin") {
         setErrors({ 
           email: "Invalid email or password", 
           password: "Invalid email or password" 
@@ -68,10 +68,12 @@ export default function LoginPage() {
         return;
       }
 
-      // server returns role and shopId as well
       login(res.data.token, res.data.role, res.data.shopId);
       toast.success("Welcome back!");
-      navigate(res.data.role === "owner" ? "/owner" : "/");
+      
+      if (res.data.role === "admin") navigate("/admin");
+      else if (res.data.role === "shop_owner") navigate("/shop-owner");
+      else navigate("/");
     } catch (err) {
       const errorMessage = err.response?.data?.message || "Login failed";
       
@@ -179,7 +181,8 @@ export default function LoginPage() {
                     <div className="flex flex-wrap gap-3">
                       {[
                         { value: "customer", label: "Customer" },
-                        { value: "owner", label: "Shop Owner" },
+                        { value: "shop_owner", label: "Shop Owner" },
+                        { value: "admin", label: "Admin" },
                       ].map((option) => {
                         const isActive = userType === option.value;
                         return (

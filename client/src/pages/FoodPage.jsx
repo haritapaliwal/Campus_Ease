@@ -1,4 +1,4 @@
-import { useState, useContext, useEffect } from "react";
+import { useState, useContext, useEffect, useMemo } from "react";
 import api from "../api";
 import { AuthContext } from "../context/AuthContext";
 import AuthPrompt from "../components/AuthPrompt";
@@ -65,7 +65,10 @@ export default function FoodPage() {
     loadRecent();
   }, [token]);
 
-  const shopNames = ["All", "CCD", "Amul", "Vinayak"];
+  const shopNames = useMemo(() => {
+    const names = ["All", ...shops.map(s => s.name)];
+    return [...new Set(names)];
+  }, [shops]);
 
   const addToCart = (shopName, item) => {
     if (!token) {

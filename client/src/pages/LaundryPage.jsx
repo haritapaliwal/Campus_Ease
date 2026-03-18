@@ -43,13 +43,11 @@ export default function LaundryPage() {
       try {
         const res = await api.get("/laundry/shops");
         const shops = res.data || [];
-        const campusShop =
-          shops.find((shop) => (shop.name || "").toLowerCase() === CAMPUS_LAUNDRY_NAME.toLowerCase()) ||
-          shops[0];
-        if (campusShop) {
-          setLaundryShops([campusShop]);
-          setActiveShopId(campusShop._id);
-          setCatalog(normalizeLaundryCatalog(campusShop.laundryCatalog));
+        if (shops.length > 0) {
+          setLaundryShops(shops);
+          // Default to the first shop
+          setActiveShopId(shops[0]._id);
+          setCatalog(normalizeLaundryCatalog(shops[0].laundryCatalog));
         } else {
           setLaundryShops([]);
           setActiveShopId(null);
@@ -260,13 +258,32 @@ export default function LaundryPage() {
             </div>
           ) : (
             <div className="bg-white rounded-2xl shadow p-6">
-              <p className="text-sm text-gray-500">Laundry partner</p>
-              <h3 className="text-2xl font-bold text-gray-900">
-                {activeShop?.name || CAMPUS_LAUNDRY_NAME}
-              </h3>
-              <p className="text-xs uppercase tracking-widest text-gray-400 mt-1">
-                {activeShop?.type || "laundry"}
-              </p>
+              <p className="text-sm text-gray-500 mb-4">Select Laundry Partner</p>
+              <div className="flex gap-4 overflow-x-auto pb-2">
+                {laundryShops.map((shop) => (
+                  <button
+                    key={shop._id}
+                    onClick={() => setActiveShopId(shop._id)}
+                    className={`flex-shrink-0 px-6 py-4 rounded-2xl border-2 transition-all duration-300 ${
+                      activeShopId === shop._id
+                        ? "border-purple-500 bg-purple-50"
+                        : "border-gray-100 bg-white hover:border-purple-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-2xl">
+                        🧺
+                      </div>
+                      <div className="text-left">
+                        <p className="font-bold text-gray-900">{shop.name}</p>
+                        <p className="text-xs text-gray-500 px-2 py-0.5 bg-gray-100 rounded-full inline-block mt-1 uppercase tracking-tighter">
+                          {shop.category}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

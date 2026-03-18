@@ -35,7 +35,7 @@ export default function Navbar() {
               Home
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-300 group-hover:w-full"></span>
             </Link>
-            {role !== "owner" && (
+            {(!role || role === "customer") && (
               <>
                 <Link 
                   to="/food" 
@@ -60,7 +60,7 @@ export default function Navbar() {
                 </Link>
               </>
             )}
-            {token && role !== "owner" && (
+            {token && role === "customer" && (
               <Link 
                 to="/my-bookings" 
                 className="text-gray-700 hover:text-purple-600 font-medium transition-colors duration-300 relative group"
@@ -69,12 +69,21 @@ export default function Navbar() {
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-300 group-hover:w-full"></span>
               </Link>
             )}
-            {token && role === "owner" && (
+            {token && role === "shop_owner" && (
               <Link 
-                to="/owner" 
+                to="/shop-owner" 
                 className="text-gray-700 hover:text-purple-600 font-medium transition-colors duration-300 relative group"
               >
-                Admin
+                Shop Dashboard
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-300 group-hover:w-full"></span>
+              </Link>
+            )}
+            {token && role === "admin" && (
+              <Link 
+                to="/admin" 
+                className="text-gray-700 hover:text-purple-600 font-medium transition-colors duration-300 relative group"
+              >
+                Admin Panel
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-300 group-hover:w-full"></span>
               </Link>
             )}

@@ -10,8 +10,7 @@ const slots = ["09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "01:00 PM", "02:0
 const SLOT_CAPACITY = 3;
 
 router.get("/slots", async (req, res) => {
-  // Get date from query parameter (YYYY-MM-DD format) or default to today
-  const dateParam = req.query.date;
+  const { date: dateParam, shopId } = req.query;
   let targetDate = new Date();
   
   if (dateParam) {
@@ -31,7 +30,8 @@ router.get("/slots", async (req, res) => {
   // Completed bookings free up the slot for new customers
   const bookings = await BarberBooking.find({ 
     status: { $nin: ["cancelled", "rejected", "completed"] },
-    bookingDate: { $gte: targetDate, $lte: endOfDay }
+    bookingDate: { $gte: targetDate, $lte: endOfDay },
+    ...(shopId ? { shopId } : {})
   });
   const bookingCounts = bookings.reduce((acc, booking) => {
     if (!booking.slot) return acc;
@@ -39,8 +39,8 @@ router.get("/slots", async (req, res) => {
     return acc;
   }, {});
 
-  // gather dynamic slots from all barber shops
-  const shops = await Shop.find({ type: "barber" });
+  // gather dynamic slots from shops
+  const shops = await Shop.find({ category: "barber", ...(shopId ? { _id: shopId } : {}) });
   const slotSettings = new Map();
   shops.forEach((s) => {
     (s.slots || []).forEach((slot) => {
@@ -64,16 +64,17 @@ router.get("/slots", async (req, res) => {
 
 // List barber shops (for client display if needed)
 router.get("/shops", async (req, res) => {
-  const shops = await Shop.find({ type: "barber" });
+  const shops = await Shop.find({ category: "barber" });
   res.json(shops);
 });
 
 // Book a slot
 router.post("/book", authMiddleware, async (req, res) => {
-  const { slot, bookingDate } = req.body;
+  const { slot, bookingDate, shopId } = req.body;
   try {
     if (!slot) return res.status(400).json({ message: "slot is required" });
     if (!bookingDate) return res.status(400).json({ message: "bookingDate is required" });
+    if (!shopId) return res.status(400).json({ message: "shopId is required" });
     
     // Parse and normalize the booking date
     const targetDate = new Date(bookingDate);
@@ -85,6 +86,7 @@ router.post("/book", authMiddleware, async (req, res) => {
     // Only count bookings for the specific date
     // Completed bookings free up the slot for new customers
     const activeCount = await BarberBooking.countDocuments({
+      shopId,
       slot,
       bookingDate: { $gte: targetDate, $lte: endOfDay },
       status: { $nin: ["cancelled", "rejected", "completed"] },
@@ -94,15 +96,15 @@ router.post("/book", authMiddleware, async (req, res) => {
     }
 
     // Ensure slot has not been manually disabled by owner
-    const shops = await Shop.find({ type: "barber" });
+    const shop = await Shop.findOne({ _id: shopId, category: "barber" });
+    if (!shop) return res.status(404).json({ message: "Barber shop not found" });
+
     const slotSettings = new Map();
-    shops.forEach((shop) => {
-      (shop.slots || []).forEach((entry) => {
-        const time = typeof entry === "string" ? entry : entry?.time;
-        if (!time) return;
-        const isBookable = typeof entry === "string" ? true : entry.isBookable !== false;
-        slotSettings.set(time, { isBookable });
-      });
+    (shop.slots || []).forEach((entry) => {
+      const time = typeof entry === "string" ? entry : entry?.time;
+      if (!time) return;
+      const isBookable = typeof entry === "string" ? true : entry.isBookable !== false;
+      slotSettings.set(time, { isBookable });
     });
     const combined = Array.from(new Set([...slotSettings.keys(), ...slots]));
 
@@ -118,6 +120,7 @@ router.post("/book", authMiddleware, async (req, res) => {
 
     const booking = await BarberBooking.create({ 
       userId: req.user, 
+      shopId,
       slot,
       bookingDate: targetDate
     });
@@ -133,7 +136,7 @@ router.get("/my-bookings", authMiddleware, async (req, res) => {
   const bookings = await BarberBooking.find({
     userId: req.user,
     createdAt: { $gte: since },
-  }).sort({ bookingDate: 1, slot: 1 }); // Sort by date and time
+  }).sort({ bookingDate: 1, slot: 1 }).populate("shopId", "name category"); // Sort by date and time
   res.json(bookings);
 });
 

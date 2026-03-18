@@ -18,18 +18,18 @@ export default function OwnerDashboard() {
 
   const loadShop = async () => {
     try {
-      let res = await api.get("/admin/my-shop");
+      let res = await api.get("/shop/my-shop");
       let data = res.data;
       if (!data) {
         const storedId = localStorage.getItem("shopId");
         if (storedId) {
-          const r2 = await api.get(`/admin/shops/${storedId}`);
+          const r2 = await api.get(`/shop/shops/${storedId}`);
           data = r2.data;
         }
       }
       setShop(data);
       if (data?._id) {
-        const b = await api.get(`/admin/shops/${data._id}/bookings`);
+        const b = await api.get(`/shop/shops/${data._id}/bookings`);
         setBookings(b.data || []);
       }
     } catch (e) {
@@ -41,22 +41,32 @@ export default function OwnerDashboard() {
     loadShop();
   }, []);
 
-  if (role !== "owner") {
+  if (role !== "shop_owner") {
     return <div className="container-padded py-10">Not authorized.</div>;
   }
 
   const handleAddItem = async () => {
     if (!newItem.item || !newItem.price) return;
-    const res = await api.post(`/admin/shops/${shop._id}/menu`, { item: newItem.item, price: Number(newItem.price) });
+    const res = await api.post(`/shop/shops/${shop._id}/menu`, { item: newItem.item, price: Number(newItem.price) });
     setShop(res.data);
     setNewItem({ item: "", price: "" });
+  };
+
+  const handleDeleteMenuItem = async (itemId) => {
+    if (!window.confirm("Remove this item from your menu?")) return;
+    try {
+      const res = await api.delete(`/shop/shops/${shop._id}/menu/${itemId}`);
+      setShop(res.data);
+    } catch (e) {
+      console.error("Failed to delete menu item", e);
+    }
   };
 
   const handleAddSlot = async () => {
     const slotValue = (newSlot || "").trim();
     if (!slotValue || !shop?._id) return;
     try {
-      await api.post(`/admin/shops/${shop._id}/slots`, { slot: slotValue });
+      await api.post(`/shop/shops/${shop._id}/slots`, { slot: slotValue });
       setNewSlot("");
       await loadShop(); // Reload shop data
     } catch (e) {
@@ -64,10 +74,21 @@ export default function OwnerDashboard() {
     }
   };
 
+  const handleDeleteSlot = async (slotTime) => {
+    if (!window.confirm(`Remove slot ${slotTime}?`)) return;
+    try {
+      const encoded = encodeURIComponent(slotTime);
+      await api.delete(`/shop/shops/${shop._id}/slots/${encoded}`);
+      await loadShop();
+    } catch (e) {
+      console.error("Failed to delete slot", e);
+    }
+  };
+
   const handleAddLaundryItem = async () => {
     if (!newLaundryItem.name || !newLaundryItem.price || !shop?._id) return;
     try {
-      await api.post(`/admin/shops/${shop._id}/laundry/catalog`, {
+      await api.post(`/shop/shops/${shop._id}/laundry/catalog`, {
         category: newLaundryItem.category,
         name: newLaundryItem.name,
         price: Number(newLaundryItem.price),
@@ -82,7 +103,7 @@ export default function OwnerDashboard() {
   const handleSaveLaundryItem = async () => {
     if (!editingLaundryItem?._id || !shop?._id) return;
     try {
-      await api.put(`/admin/shops/${shop._id}/laundry/catalog/${editingLaundryItem._id}`, {
+      await api.put(`/shop/shops/${shop._id}/laundry/catalog/${editingLaundryItem._id}`, {
         name: editingLaundryItem.name,
         price: Number(editingLaundryItem.price),
       });
@@ -98,7 +119,7 @@ export default function OwnerDashboard() {
     const confirmed = window.confirm("Remove this laundry item?");
     if (!confirmed) return;
     try {
-      await api.delete(`/admin/shops/${shop._id}/laundry/catalog/${itemId}`);
+      await api.delete(`/shop/shops/${shop._id}/laundry/catalog/${itemId}`);
       await loadShop();
     } catch (e) {
       console.error("Failed to delete laundry item", e);
@@ -113,7 +134,7 @@ export default function OwnerDashboard() {
     });
   };
 
-  const isBarberShop = shop?.type === "barber";
+  const isBarberShop = shop?.category === "barber";
 
   const barberSlotCounts = useMemo(() => {
     if (!isBarberShop) return {};
@@ -159,7 +180,7 @@ export default function OwnerDashboard() {
     if (!shop?._id || !time) return;
     try {
       const encoded = encodeURIComponent(time);
-      await api.put(`/admin/shops/${shop._id}/slots/${encoded}`, { isBookable: nextState });
+      await api.put(`/shop/shops/${shop._id}/slots/${encoded}`, { isBookable: nextState });
       await loadShop();
     } catch (e) {
       console.error("Failed to update slot", e);
@@ -194,9 +215,9 @@ export default function OwnerDashboard() {
             <div>
               <p className="text-sm text-gray-500">Owner workspace</p>
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{shop.name}</h1>
-              <p className="text-xs uppercase tracking-widest text-gray-400 mt-1">{shop.type}</p>
+              <p className="text-xs uppercase tracking-widest text-gray-400 mt-1">{shop.category}</p>
             </div>
-            {shop.type === "canteen" && (
+            {shop.category === "canteen" && (
               <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
                 <div className="relative flex-1 md:w-96">
                   <input
@@ -215,7 +236,7 @@ export default function OwnerDashboard() {
             )}
           </div>
 
-          {shop.type === "canteen" && (
+          {shop.category === "canteen" && (
             <div className="space-y-8">
               <div className="bg-white rounded-2xl shadow p-6">
                 <h3 className="text-lg font-bold mb-4">Add New Menu Item</h3>
@@ -229,7 +250,7 @@ export default function OwnerDashboard() {
                   {filteredMenu.length === 0 ? (
                     <p className="text-sm text-gray-500">No menu items yet.</p>
                   ) : (
-                    <CardGrid items={filteredMenu} emptyText="No menu items yet." />
+                    <CardGrid items={filteredMenu} emptyText="No menu items yet." onDelete={handleDeleteMenuItem} />
                   )}
                 </div>
               </div>
@@ -238,7 +259,7 @@ export default function OwnerDashboard() {
             </div>
           )}
 
-          {shop.type === "barber" && (
+          {shop.category === "barber" && (
             <div className="space-y-8">
               <div className="bg-white rounded-2xl shadow p-6">
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -302,19 +323,27 @@ export default function OwnerDashboard() {
                           <p className="text-xs text-gray-500">
                             {isAutoFull ? "Max capacity reached" : `${remaining} spot${remaining === 1 ? "" : "s"} left`}
                           </p>
-                          <button
-                            disabled={isAutoFull}
-                            onClick={() => toggleBarberSlot(slot.time, !isBookable)}
-                            className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                              isAutoFull
-                                ? "bg-red-200 text-red-700 cursor-not-allowed"
-                                : isBookable
-                                ? "bg-red-100 text-red-600 hover:bg-red-200"
-                                : "bg-green-100 text-green-700 hover:bg-green-200"
-                            }`}
-                          >
-                            {isBookable ? "Mark booked" : "Mark available"}
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              disabled={isAutoFull}
+                              onClick={() => toggleBarberSlot(slot.time, !isBookable)}
+                              className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                                isAutoFull
+                                  ? "bg-red-200 text-red-700 cursor-not-allowed"
+                                  : isBookable
+                                  ? "bg-red-100 text-red-600 hover:bg-red-200"
+                                  : "bg-green-100 text-green-700 hover:bg-green-200"
+                              }`}
+                            >
+                              {isBookable ? "Mark booked" : "Mark available"}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSlot(slot.time)}
+                              className="px-3 py-2 rounded-lg text-xs font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                            >
+                              Remove
+                            </button>
+                          </div>
                           {isAutoFull && (
                             <p className="text-[11px] text-red-600">
                               This slot will open automatically once a booking is cancelled or moved.
@@ -370,9 +399,9 @@ export default function OwnerDashboard() {
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <button onClick={async()=>{await api.put(`/admin/shops/${shop._id}/barber/${b._id}`,{status:'accepted'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-green-100 text-green-700 text-xs font-semibold">Accept</button>
-                          <button onClick={async()=>{await api.put(`/admin/shops/${shop._id}/barber/${b._id}`,{status:'rejected'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-red-100 text-red-700 text-xs font-semibold">Reject</button>
-                          <button onClick={async()=>{await api.put(`/admin/shops/${shop._id}/barber/${b._id}`,{status:'completed'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-semibold">Completed</button>
+                          <button onClick={async()=>{await api.put(`/shop/shops/${shop._id}/barber/${b._id}`,{status:'accepted'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-green-100 text-green-700 text-xs font-semibold">Accept</button>
+                          <button onClick={async()=>{await api.put(`/shop/shops/${shop._id}/barber/${b._id}`,{status:'rejected'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-red-100 text-red-700 text-xs font-semibold">Reject</button>
+                          <button onClick={async()=>{await api.put(`/shop/shops/${shop._id}/barber/${b._id}`,{status:'completed'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-semibold">Completed</button>
                         </div>
                       </div>
                     ))}
@@ -382,7 +411,7 @@ export default function OwnerDashboard() {
             </div>
           )}
 
-          {shop.type === "laundry" && (
+          {shop.category === "laundry" && (
             <div className="space-y-8">
               <div className="bg-white rounded-2xl shadow p-6">
                 <div className="flex flex-col gap-3 mb-6 md:flex-row md:items-center md:justify-between">
@@ -491,9 +520,9 @@ export default function OwnerDashboard() {
                             </p>
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            <button onClick={async()=>{await api.put(`/admin/shops/${shop._id}/laundry/${b._id}`,{status:'accepted'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-green-100 text-green-700 text-xs font-semibold">Accept</button>
-                            <button onClick={async()=>{await api.put(`/admin/shops/${shop._id}/laundry/${b._id}`,{status:'rejected'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-red-100 text-red-700 text-xs font-semibold">Reject</button>
-                            <button onClick={async()=>{await api.put(`/admin/shops/${shop._id}/laundry/${b._id}`,{status:'completed'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-semibold">Completed</button>
+                            <button onClick={async()=>{await api.put(`/shop/shops/${shop._id}/laundry/${b._id}`,{status:'accepted'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-green-100 text-green-700 text-xs font-semibold">Accept</button>
+                            <button onClick={async()=>{await api.put(`/shop/shops/${shop._id}/laundry/${b._id}`,{status:'rejected'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-red-100 text-red-700 text-xs font-semibold">Reject</button>
+                            <button onClick={async()=>{await api.put(`/shop/shops/${shop._id}/laundry/${b._id}`,{status:'completed'}); await loadShop();}} className="px-3 py-2 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-semibold">Completed</button>
                           </div>
                         </div>
                         <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -554,22 +583,33 @@ function SectionHeader({ title, className = "" }){
   );
 }
 
-function CardGrid({ items, promo = false, emptyText }){
+function CardGrid({ items, promo = false, emptyText, onDelete }){
   if (!items || items.length === 0){
     return <div className="mt-3 text-sm text-gray-500">{emptyText}</div>;
   }
   return (
     <div className="mt-3 grid sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
       {items.map((m, i) => (
-        <div key={i} className={`bg-white rounded-2xl shadow p-4 border ${promo? 'border-red-200' : 'border-gray-100'}`}>
+        <div key={i} className={`bg-white rounded-2xl shadow p-4 border relative group ${promo? 'border-red-200' : 'border-gray-100'}`}>
+          {onDelete && (
+            <button 
+              onClick={() => onDelete(m._id)}
+              className="absolute top-2 right-2 p-1.5 bg-rose-50 text-rose-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-500 hover:text-white"
+              title="Remove item"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
           {promo && (
             <span className="inline-block mb-2 text-[10px] font-bold bg-red-100 text-red-600 px-2 py-1 rounded-full">15% Off</span>
           )}
           <div className="h-28 flex items-center justify-center text-5xl">🍔</div>
           <div className="mt-3">
             <div className="flex items-center justify-between">
-              <p className="font-bold text-gray-900 truncate">{m.item}</p>
-              <span className="text-sm font-bold text-purple-600">₹{m.price}</span>
+              <p className="font-bold text-gray-900 truncate pr-8">{m.item}</p>
+              <span className="text-sm font-bold text-purple-600 whitespace-nowrap">₹{m.price}</span>
             </div>
             <div className="mt-1 text-[11px] text-gray-500">Sold 1k • 15% ⭐</div>
           </div>
@@ -605,7 +645,7 @@ function OrdersByStudent({ shop, orders, refresh }){
 
   const updateAll = async (userGroup, status) => {
     await Promise.all(
-      userGroup.orders.map(o => api.put(`/admin/shops/${shop._id}/orders/${o._id}`, { status }))
+      userGroup.orders.map(o => api.put(`/shop/shops/${shop._id}/orders/${o._id}`, { status }))
     );
     await refresh();
   };

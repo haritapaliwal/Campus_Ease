@@ -12,6 +12,9 @@ export default function BarberPage() {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showSuccess, setShowSuccess] = useState(false);
+  const [shops, setShops] = useState([]);
+  const [activeShopId, setActiveShopId] = useState(null);
+  const activeShop = shops.find(s => s._id === activeShopId);
 
   // Generate dates for the next 7 days
   const generateDates = () => {
@@ -37,14 +40,33 @@ export default function BarberPage() {
   const dates = generateDates();
 
   useEffect(() => {
-    loadSlots();
-  }, [selectedDate]);
+    loadShops();
+  }, []);
+
+  useEffect(() => {
+    if (activeShopId) {
+      loadSlots();
+    }
+  }, [selectedDate, activeShopId]);
+
+  const loadShops = async () => {
+    try {
+      const res = await api.get("/barber/shops");
+      setShops(res.data || []);
+      if (res.data?.length > 0) {
+        // Automatically select the first shop if there's only one or just as default
+        setActiveShopId(res.data[0]._id);
+      }
+    } catch (e) {
+      console.error("Failed to load shops", e);
+    }
+  };
 
   const loadSlots = async () => {
     try {
       // Format date as YYYY-MM-DD for the API
       const dateStr = selectedDate.toISOString().split('T')[0];
-      const res = await api.get(`/barber/slots?date=${dateStr}`);
+      const res = await api.get(`/barber/slots?date=${dateStr}&shopId=${activeShopId}`);
       setAvailableSlots(res.data || []);
     } catch (e) {
       console.error("Failed to load slots", e);
@@ -80,7 +102,8 @@ export default function BarberPage() {
       const dateStr = selectedDate.toISOString().split('T')[0];
       await api.post("/barber/book", { 
         slot: selectedSlot,
-        bookingDate: dateStr
+        bookingDate: dateStr,
+        shopId: activeShopId
       });
       setBookedSlot(selectedSlot);
       setShowSuccess(true);
@@ -147,10 +170,10 @@ export default function BarberPage() {
               </div>
               <h2 className="text-3xl font-bold text-gray-900 mb-3">Booking Confirmed!</h2>
               <p className="text-gray-600 mb-6 text-lg">
-                Your appointment is scheduled for <strong className="text-purple-600">{bookedSlot}</strong>
+                Your appointment is scheduled for <strong className="text-purple-600">{bookedSlot}</strong> at <strong className="text-purple-600">{activeShop?.name}</strong>
               </p>
               <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl p-6 mb-6 border border-purple-100">
-                <p className="text-sm text-gray-600 mb-2">Please show this confirmation at the barber shop</p>
+                <p className="text-sm text-gray-600 mb-2">Please show this confirmation at {activeShop?.name || "the barber shop"}</p>
                 <p className="text-lg font-semibold text-purple-600">{bookedSlot}</p>
               </div>
               <button
@@ -167,6 +190,40 @@ export default function BarberPage() {
           </div>
         ) : (
           <div className="max-w-4xl mx-auto space-y-6">
+            {/* Shop Selection Section */}
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Select Barber Shop</h2>
+              <div className="flex gap-4 overflow-x-auto pb-2">
+                {shops.map((shop) => (
+                  <button
+                    key={shop._id}
+                    onClick={() => {
+                        setActiveShopId(shop._id);
+                        setSelectedSlot(null);
+                    }}
+                    className={`flex-shrink-0 px-6 py-4 rounded-2xl border-2 transition-all duration-300 ${
+                      activeShopId === shop._id
+                        ? "border-purple-500 bg-purple-50"
+                        : "border-gray-100 bg-white hover:border-purple-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center text-2xl">
+                        💈
+                      </div>
+                      <div className="text-left">
+                        <p className="font-bold text-gray-900">{shop.name}</p>
+                        <p className="text-xs text-gray-500 px-2 py-0.5 bg-gray-100 rounded-full inline-block mt-1 uppercase tracking-tighter">
+                          {shop.category}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+                {shops.length === 0 && <p className="text-gray-500 text-sm">No barber shops available yet.</p>}
+              </div>
+            </div>
+
             {/* Choose the date Section */}
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Choose the date</h2>

@@ -7,7 +7,7 @@ const router = express.Router();
 
 // Get all shops with menus
 router.get("/shops", async (req, res) => {
-  const shops = await Shop.find();
+  const shops = await Shop.find({ category: "canteen" });
   res.json(shops);
 });
 
@@ -27,6 +27,7 @@ router.post("/order", authMiddleware, async (req, res) => {
 
     const createdOrders = [];
     for (const [shopName, shopItems] of Object.entries(grouped)) {
+      const shopDoc = await Shop.findOne({ name: shopName });
       const normalizedItems = shopItems.map((it) => ({
         item: it.item,
         price: Number(it.price) || 0,
@@ -34,6 +35,7 @@ router.post("/order", authMiddleware, async (req, res) => {
       }));
       const order = await Order.create({
         userId: req.user,
+        shopId: shopDoc ? shopDoc._id : null,
         items: normalizedItems,
         orderType,
       });

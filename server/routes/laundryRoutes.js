@@ -7,7 +7,7 @@ const router = express.Router();
 
 // Get all laundry shops
 router.get("/shops", async (req, res) => {
-  const shops = await Shop.find({ type: "laundry" }); // add `type` field to Shop schema if needed
+  const shops = await Shop.find({ category: "laundry" }); // add `type` field to Shop schema if needed
   res.json(shops);
 });
 
@@ -21,7 +21,7 @@ router.post("/book", authMiddleware, async (req, res) => {
 
     const shop = shopId
       ? await Shop.findById(shopId)
-      : await Shop.findOne({ type: "laundry" });
+      : await Shop.findOne({ category: "laundry" });
 
     if (!shop) {
       return res.status(404).json({ message: "Laundry shop not found" });

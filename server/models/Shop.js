@@ -10,7 +10,8 @@ const laundryItemSchema = new mongoose.Schema(
 
 const shopSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  type: { type: String, enum: ["canteen", "laundry", "barber"], required: true },
+  category: { type: String, enum: ["canteen", "laundry", "barber"], required: true },
+  status: { type: String, enum: ["active", "inactive"], default: "active" },
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   // For canteen shops
   menu: [{ item: String, price: Number }],

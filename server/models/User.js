@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
   studentId: { type: String },
   email: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
-  role: { type: String, enum: ["student", "owner"], default: "student" },
+  role: { type: String, enum: ["customer", "shop_owner", "admin"], default: "customer" },
   // If owner, the shop they manage
   shopId: { type: mongoose.Schema.Types.ObjectId, ref: "Shop" }
 });
