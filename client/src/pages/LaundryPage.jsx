@@ -11,7 +11,7 @@ const normalizeLaundryCatalog = (record = {}) => ({
 const CAMPUS_LAUNDRY_NAME = "Campus Laundry";
 
 export default function LaundryPage() {
-  const { token, refreshToken } = useContext(AuthContext);
+  const { token, logout, refreshToken } = useContext(AuthContext);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [currentView, setCurrentView] = useState("home"); // "home" or "checkout"
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -186,11 +186,8 @@ export default function LaundryPage() {
       const errorMessage = err.response?.data?.message || err.message || "Order failed";
       
       if (errorMessage.includes("Invalid Token") || errorMessage.includes("Unauthorized") || err.response?.status === 401) {
-        // Token is invalid, clear it and show auth prompt
-        localStorage.removeItem("token");
-        localStorage.removeItem("role");
-        localStorage.removeItem("shopId");
-        if (refreshToken) refreshToken(); // Refresh AuthContext state
+        // Use logout from context which handles both API and state cleanup
+        if (logout) await logout();
         setShowAuthPrompt(true);
         alert("Your session has expired. Please login again.");
       } else {

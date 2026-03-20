@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import connectDB from "./config/db.js";
 
 import authRoutes from "./routes/authRoutes.js";
@@ -9,6 +10,8 @@ import barberRoutes from "./routes/barberRoutes.js";
 import laundryRoutes from "./routes/laundryRoutes.js";
 import superAdminRoutes from "./routes/superAdminRoutes.js";
 import shopRoutes from "./routes/shopRoutes.js";
+import aiRoutes from "./routes/aiRoutes.js";
+import { buildAndIndexChunks } from "./services/ragService.js";
 
 dotenv.config();
 const app = express();
@@ -32,9 +35,17 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
 
 // DB connection
-connectDB();
+// After connecting, trigger RAG indexing so embeddings are ready
+connectDB().then(() => {
+  // PHASE 1 of RAG: Build text chunks from DB and store their vector embeddings
+  // This runs every time the server starts, keeping the index fresh.
+  buildAndIndexChunks().catch((err) =>
+    console.error("RAG indexing failed:", err.message)
+  );
+});
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -43,6 +54,7 @@ app.use("/api/barber", barberRoutes);
 app.use("/api/laundry", laundryRoutes);
 app.use("/api/admin", superAdminRoutes);
 app.use("/api/shop", shopRoutes);
+app.use("/api/ai", aiRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

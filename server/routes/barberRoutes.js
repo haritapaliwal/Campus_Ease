@@ -1,5 +1,6 @@
 import express from "express";
 import BarberBooking from "../models/BarberBooking.js";
+import SlotCounter from "../models/SlotCounter.js";
 import Shop from "../models/Shop.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 
@@ -74,28 +75,13 @@ router.post("/book", authMiddleware, async (req, res) => {
   try {
     if (!slot) return res.status(400).json({ message: "slot is required" });
     if (!bookingDate) return res.status(400).json({ message: "bookingDate is required" });
-    if (!shopId) return res.status(400).json({ message: "shopId is required" });
+    if (!shopId) return res.status(400).json({ message: "shopId required" });
     
-    // Parse and normalize the booking date
+    // Normalize date
     const targetDate = new Date(bookingDate);
     targetDate.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
-    
-    // Exclude cancelled, rejected, and completed bookings from slot count
-    // Only count bookings for the specific date
-    // Completed bookings free up the slot for new customers
-    const activeCount = await BarberBooking.countDocuments({
-      shopId,
-      slot,
-      bookingDate: { $gte: targetDate, $lte: endOfDay },
-      status: { $nin: ["cancelled", "rejected", "completed"] },
-    });
-    if (activeCount >= SLOT_CAPACITY) {
-      return res.status(400).json({ message: "Slot already fully booked for this date" });
-    }
 
-    // Ensure slot has not been manually disabled by owner
+    // 1. Static/Manual availability check (same as before)
     const shop = await Shop.findOne({ _id: shopId, category: "barber" });
     if (!shop) return res.status(404).json({ message: "Barber shop not found" });
 
@@ -113,18 +99,49 @@ router.post("/book", authMiddleware, async (req, res) => {
     }
 
     const manualEntry = slotSettings.get(slot);
-    const isManuallyBlocked = manualEntry && manualEntry.isBookable === false;
-    if (isManuallyBlocked) {
+    if (manualEntry && manualEntry.isBookable === false) {
       return res.status(400).json({ message: "Slot is not available right now" });
     }
 
-    const booking = await BarberBooking.create({ 
-      userId: req.user, 
-      shopId,
-      slot,
-      bookingDate: targetDate
+    // 2. ATOMIC CHECK & INCREMENT
+    // Using findOneAndUpdate with upsert: true and a filter on count
+    // This is the core of the protection against race conditions
+    const counter = await SlotCounter.findOneAndUpdate(
+      { 
+        shopId, 
+        slot, 
+        bookingDate: targetDate,
+        count: { $lt: SLOT_CAPACITY } // Only increment if below capacity
+      },
+      { $inc: { count: 1 } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).catch(err => {
+      // If upsert fails due to unique index + filter, it mean it's at capacity
+      if (err.code === 11000) return null; 
+      throw err;
     });
-    res.json(booking);
+
+    if (!counter) {
+      return res.status(409).json({ message: "Slot already fully booked for this date" });
+    }
+
+    // 3. CREATE BOOKING
+    try {
+      const booking = await BarberBooking.create({ 
+        userId: req.user, 
+        shopId,
+        slot,
+        bookingDate: targetDate
+      });
+      res.json(booking);
+    } catch (createErr) {
+      // ROLLBACK counter if booking creation fails
+      await SlotCounter.updateOne(
+        { shopId, slot, bookingDate: targetDate },
+        { $inc: { count: -1 } }
+      );
+      throw createErr;
+    }
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -145,13 +162,38 @@ router.put("/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
   const { slot, status } = req.body;
   try {
-    const updated = await BarberBooking.findOneAndUpdate(
-      { _id: id, userId: req.user },
-      { ...(slot ? { slot } : {}), ...(status ? { status } : {}) },
-      { new: true }
-    );
-    if (!updated) return res.status(404).json({ message: "Booking not found" });
-    res.json(updated);
+    const booking = await BarberBooking.findOne({ _id: id, userId: req.user });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+
+    const oldStatus = booking.status;
+    const oldSlot = booking.slot;
+    const oldDate = booking.bookingDate;
+
+    // We only allow status updates for now to keep slot consistency simple
+    if (status) {
+      booking.status = status;
+    }
+    
+    // NOTE: Slot changes are complex due to capacity checks on the NEW slot.
+    // For simplicity and safety, we focus on terminal status counter release.
+    if (slot && slot !== oldSlot) {
+      return res.status(400).json({ message: "To change slots, please cancel and re-book" });
+    }
+
+    await booking.save();
+
+    // If changing from active to terminal status, decrement counter
+    const wasActive = !["cancelled", "rejected", "completed"].includes(oldStatus);
+    const isTerminal = ["cancelled", "rejected", "completed"].includes(status);
+
+    if (wasActive && isTerminal) {
+      await SlotCounter.updateOne(
+        { shopId: booking.shopId, slot: oldSlot, bookingDate: oldDate },
+        { $inc: { count: -1 } }
+      );
+    }
+
+    res.json(booking);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -161,13 +203,26 @@ router.put("/:id", authMiddleware, async (req, res) => {
 router.delete("/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
-    const updated = await BarberBooking.findOneAndUpdate(
-      { _id: id, userId: req.user },
-      { status: "cancelled" },
-      { new: true }
-    );
-    if (!updated) return res.status(404).json({ message: "Booking not found" });
-    res.json(updated);
+    const booking = await BarberBooking.findOne({ _id: id, userId: req.user });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+
+    if (booking.status === "cancelled") {
+      return res.status(400).json({ message: "Already cancelled" });
+    }
+
+    const oldStatus = booking.status;
+    booking.status = "cancelled";
+    await booking.save();
+
+    // If it was an active booking, decrement the slot counter
+    if (!["cancelled", "rejected", "completed"].includes(oldStatus)) {
+      await SlotCounter.updateOne(
+        { shopId: booking.shopId, slot: booking.slot, bookingDate: booking.bookingDate },
+        { $inc: { count: -1 } }
+      );
+    }
+
+    res.json(booking);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

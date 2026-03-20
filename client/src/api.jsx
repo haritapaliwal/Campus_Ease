@@ -14,14 +14,12 @@ if (rawApiUrl) {
 
 const api = axios.create({
   baseURL,
+  withCredentials: true, // Required for sending/receiving cookies in cross-origin requests
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers = config.headers || {};
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  // We no longer need to manually set the Authorization header
+  // the browser will automatically include the HttpOnly cookie
   return config;
 }, (error) => {
   return Promise.reject(error);
@@ -32,8 +30,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token is invalid or expired
-      localStorage.removeItem("token");
+      // Session expired or invalid
       localStorage.removeItem("role");
       localStorage.removeItem("shopId");
       // Don't redirect automatically, let the component handle it

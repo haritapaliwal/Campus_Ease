@@ -4,6 +4,7 @@ import User from "../models/User.js";
 import Order from "../models/Order.js";
 import BarberBooking from "../models/BarberBooking.js";
 import LaundryBooking from "../models/LaundryBooking.js";
+import SlotCounter from "../models/SlotCounter.js";
 import authMiddleware, { authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -219,12 +220,31 @@ router.put("/shops/:shopId/barber/:id", ownerGuard, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   if (!status) return res.status(400).json({ message: "status required" });
-  const booking = await BarberBooking.findById(id);
-  if (!booking) return res.status(404).json({ message: "Booking not found" });
-  booking.status = status;
-  if (status === "completed") booking.deliveredAt = new Date();
-  await booking.save();
-  res.json(booking);
+  
+  try {
+    const booking = await BarberBooking.findById(id);
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    
+    const oldStatus = booking.status;
+    booking.status = status;
+    if (status === "completed") booking.deliveredAt = new Date();
+    await booking.save();
+
+    // If changing from active to terminal status, decrement counter
+    const wasActive = !["cancelled", "rejected", "completed"].includes(oldStatus);
+    const isTerminal = ["cancelled", "rejected", "completed"].includes(status);
+
+    if (wasActive && isTerminal) {
+      await SlotCounter.updateOne(
+        { shopId: booking.shopId, slot: booking.slot, bookingDate: booking.bookingDate },
+        { $inc: { count: -1 } }
+      );
+    }
+
+    res.json(booking);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 // Update LAUNDRY booking status (accepted | rejected | completed)

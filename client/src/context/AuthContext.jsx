@@ -3,64 +3,64 @@ import { createContext, useState, useEffect } from "react";
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(localStorage.getItem("token"));
   const [role, setRole] = useState(localStorage.getItem("role") || "customer");
   const [shopId, setShopId] = useState(localStorage.getItem("shopId") || null);
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("role"));
 
   // Sync with localStorage changes (e.g., from other tabs or after token removal)
+  // Sync with localStorage changes (for role/shopId persistence)
   useEffect(() => {
     const handleStorageChange = () => {
-      const storedToken = localStorage.getItem("token");
       const storedRole = localStorage.getItem("role") || "customer";
       const storedShopId = localStorage.getItem("shopId");
       
-      if (storedToken !== token) {
-        setToken(storedToken);
-      }
-      if (storedRole !== role) {
-        setRole(storedRole);
-      }
-      if (storedShopId !== shopId) {
-        setShopId(storedShopId);
-      }
+      if (storedRole !== role) setRole(storedRole);
+      if (storedShopId !== shopId) setShopId(storedShopId);
+      setIsLoggedIn(!!localStorage.getItem("role"));
     };
 
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
-  }, [token, role, shopId]);
+  }, [role, shopId]);
 
-  const login = (jwt, userRole = "customer", userShopId = null) => {
-    setToken(jwt);
+  const login = (jwtIgnored, userRole = "customer", userShopId = null) => {
     setRole(userRole);
     setShopId(userShopId);
-    localStorage.setItem("token", jwt);
+    setIsLoggedIn(true);
     localStorage.setItem("role", userRole);
     if (userShopId) localStorage.setItem("shopId", userShopId);
     else localStorage.removeItem("shopId");
   };
 
-  const logout = () => {
-    setToken(null);
-    setRole("customer");
-    setShopId(null);
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("shopId");
+  const logout = async () => {
+    try {
+      // Call backend to clear the cookie
+      const api = (await import("../api")).default;
+      await api.post("/auth/logout");
+    } catch (err) {
+      console.error("Logout failed", err);
+    } finally {
+      setRole("customer");
+      setShopId(null);
+      setIsLoggedIn(false);
+      localStorage.removeItem("role");
+      localStorage.removeItem("shopId");
+    }
   };
 
   // Method to refresh token from localStorage (useful when token is cleared externally)
+  // Updated refreshToken to check role instead of token
   const refreshToken = () => {
-    const storedToken = localStorage.getItem("token");
     const storedRole = localStorage.getItem("role") || "customer";
     const storedShopId = localStorage.getItem("shopId");
     
-    setToken(storedToken);
     setRole(storedRole);
     setShopId(storedShopId);
+    setIsLoggedIn(!!localStorage.getItem("role"));
   };
 
   return (
-    <AuthContext.Provider value={{ token, role, shopId, login, logout, refreshToken }}>
+    <AuthContext.Provider value={{ token: isLoggedIn ? "present" : null, role, shopId, isLoggedIn, login, logout, refreshToken }}>
       {children}
     </AuthContext.Provider>
   );

@@ -15,6 +15,7 @@ import LaundryPage from "./pages/LaundryPage.jsx";
 import MyBookings from "./pages/MyBookings.jsx";
 import ShopOwnerDashboard from "./pages/shopOwner/ShopOwnerDashboard.jsx";
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
+import AIChatBot from "./components/AIChatBot.jsx";
 
 export default function App() {
   return (
@@ -58,6 +59,8 @@ export default function App() {
             }
           />
         </Routes>
+        {/* AI Chat Bot — floats over all pages, visible only to customers */}
+        <AIChatBot />
       </Router>
     </AuthProvider>
   );
