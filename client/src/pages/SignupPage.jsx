@@ -79,16 +79,11 @@ export default function SignupPage() {
 
     setIsLoading(true);
     try {
-      await api.post("/auth/signup", { studentId, email, password });
-      const res = await api.post("/auth/login", { email, password });
-      if (res.data?.token) {
-        login(res.data.token, res.data.role, res.data.shopId);
-        toast.success("Account created successfully! Welcome!");
-        navigate("/");
-      } else {
-        toast.error("Signup succeeded but auto-login failed. Please log in manually.");
-        navigate("/login");
-      }
+      // Signup already sets the auth cookie and returns { id, role }
+      const res = await api.post("/auth/signup", { studentId, email, password });
+      login(null, res.data.role, res.data.shopId ?? null);
+      toast.success("Account created successfully! Welcome!");
+      navigate("/");
     } catch (err) {
       const errorMessage = err.response?.data?.message || "Signup failed";
       
