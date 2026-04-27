@@ -3,6 +3,9 @@ node_modules/
 .pnp
 .pnp.js
 
+# Lock files (platform-specific native binaries cause cross-platform build failures)
+package-lock.json
+
 # Environment variables (Secrets)
 .env
 .env.local
