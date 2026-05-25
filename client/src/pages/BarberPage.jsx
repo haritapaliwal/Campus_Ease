@@ -118,6 +118,9 @@ export default function BarberPage() {
   // Generate time slots - all slots are available by default for each new date
   // They become unavailable only if admin marks them or they reach capacity
   const generateTimeSlots = () => {
+    if (activeShop && Array.isArray(activeShop.slots) && activeShop.slots.length > 0) {
+      return activeShop.slots.map(s => typeof s === "string" ? s : s.time).filter(Boolean);
+    }
     return [
       "09:00 AM", "10:00 AM", "11:00 AM", 
       "12:00 PM", "01:00 PM", "02:00 PM", 
