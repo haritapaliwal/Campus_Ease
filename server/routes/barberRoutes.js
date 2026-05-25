@@ -43,7 +43,11 @@ router.get("/slots", async (req, res) => {
   // gather dynamic slots from shops
   const shops = await Shop.find({ category: "barber", ...(shopId ? { _id: shopId } : {}) });
   const slotSettings = new Map();
+  let hasCustomSlots = false;
   shops.forEach((s) => {
+    if (s.slots && s.slots.length > 0) {
+      hasCustomSlots = true;
+    }
     (s.slots || []).forEach((slot) => {
       const time = typeof slot === "string" ? slot : slot?.time;
       if (!time) return;
@@ -52,7 +56,7 @@ router.get("/slots", async (req, res) => {
     });
   });
 
-  const combined = Array.from(new Set([ ...slotSettings.keys(), ...slots ]));
+  const combined = hasCustomSlots ? Array.from(slotSettings.keys()) : slots;
   const available = combined.filter((time) => {
     const manualState = slotSettings.get(time);
     const isManuallyBlocked = manualState && manualState.isBookable === false;
@@ -86,13 +90,17 @@ router.post("/book", authMiddleware, async (req, res) => {
     if (!shop) return res.status(404).json({ message: "Barber shop not found" });
 
     const slotSettings = new Map();
+    let hasCustomSlots = false;
+    if (shop.slots && shop.slots.length > 0) {
+      hasCustomSlots = true;
+    }
     (shop.slots || []).forEach((entry) => {
       const time = typeof entry === "string" ? entry : entry?.time;
       if (!time) return;
       const isBookable = typeof entry === "string" ? true : entry.isBookable !== false;
       slotSettings.set(time, { isBookable });
     });
-    const combined = Array.from(new Set([...slotSettings.keys(), ...slots]));
+    const combined = hasCustomSlots ? Array.from(slotSettings.keys()) : slots;
 
     if (!combined.includes(slot)) {
       return res.status(400).json({ message: "Invalid slot" });

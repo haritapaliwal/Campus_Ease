@@ -1,5 +1,47 @@
 import Shop from "../models/Shop.js";
 import EmbeddingDoc from "../models/EmbeddingDoc.js";
+import mongoose from "mongoose";
+
+async function createVectorSearchIndex() {
+  try {
+    const conn = mongoose.connection;
+    if (conn.readyState !== 1) {
+      console.log("⏳ RAG: Waiting for DB connection to build Vector Search Index...");
+      return;
+    }
+    const collection = conn.collection("embeddingdocs");
+    const indexes = await collection.listSearchIndexes().toArray();
+    const hasIndex = indexes.some((idx) => idx.name === "vector_index");
+    if (!hasIndex) {
+      console.log("🔄 RAG: Creating Atlas Vector Search index 'vector_index'...");
+      await collection.createSearchIndex({
+        name: "vector_index",
+        type: "vectorSearch",
+        definition: {
+          fields: [
+            {
+              type: "vector",
+              path: "embedding",
+              numDimensions: 768,
+              similarity: "cosine",
+            },
+          ],
+        },
+      });
+      console.log("✅ RAG: Atlas Vector Search index 'vector_index' created.");
+    } else {
+      console.log("✅ RAG: Atlas Vector Search index 'vector_index' already exists.");
+    }
+  } catch (err) {
+    console.warn(
+      "⚠️ RAG: Programmatic Atlas Search Index creation skipped/failed. " +
+        "If you are not running on MongoDB Atlas (e.g. running locally), this is normal. " +
+        "RAG will automatically fall back to high-precision in-memory cosine similarity. Error: " +
+        err.message
+    );
+  }
+}
+
 
 /**
  * =============================================================================
@@ -119,6 +161,7 @@ async function getEmbedding(text, taskType = "RETRIEVAL_DOCUMENT") {
       // Including it in BOTH the URL and body causes a 404 conflict.
       content: { parts: [{ text }] },
       taskType,
+      outputDimensionality: 768,
     }),
   });
 
@@ -161,6 +204,9 @@ export async function buildAndIndexChunks() {
     console.warn("⚠️  GEMINI_API_KEY not set — RAG indexing skipped.");
     return;
   }
+
+  // Create Atlas Vector Search index (best-effort)
+  await createVectorSearchIndex();
 
   console.log("🔄 RAG: Starting indexing of campus data...");
 
@@ -250,16 +296,10 @@ export async function buildAndIndexChunks() {
  *
  * 1. We receive the user's question (e.g., "Which barber shops have slots?")
  * 2. We embed that question using "RETRIEVAL_QUERY" task type
- * 3. We load ALL stored embeddings from MongoDB
- * 4. We compute cosine similarity between the query vector and each stored vector
- * 5. We sort by similarity score (highest first)
- * 6. We return the top-K chunks (e.g., top 3)
- *
- * WHY LOAD ALL FROM MONGODB?
- * Our campus has maybe 10-20 shops — loading all embeddings is trivial.
- * At scale (millions of documents), you'd use a proper vector DB like:
- *   - Pinecone, Weaviate, Qdrant, pgvector (Postgres), or MongoDB Atlas Vector Search
- * These do Approximate Nearest Neighbor (ANN) search without loading everything.
+ * 3. We try native MongoDB Atlas Vector Search using aggregation $vectorSearch
+ * 4. Fallback: load all embeddings from DB and calculate local cosine similarity
+ * 5. Sort by similarity score (highest first)
+ * 6. Return top-K chunks
  *
  * @param {string} query - the user's question
  * @param {number} topK  - how many relevant chunks to return (default: 3)
@@ -271,10 +311,41 @@ export async function retrieveRelevantChunks(query, topK = 3) {
     return []; // gracefully degrade if no API key
   }
 
-  // Step 1: Embed the user's query (note: RETRIEVAL_QUERY — different task type!)
+  // Step 1: Embed the user's query
   const queryEmbedding = await getEmbedding(query, "RETRIEVAL_QUERY");
 
-  // Step 2: Load all stored document embeddings from MongoDB
+  // Step 2: Native MongoDB Atlas Vector Search
+  try {
+    const results = await EmbeddingDoc.aggregate([
+      {
+        $vectorSearch: {
+          index: "vector_index",
+          path: "embedding",
+          queryVector: queryEmbedding,
+          numCandidates: 100,
+          limit: topK,
+        },
+      },
+    ]);
+
+    if (results && results.length > 0) {
+      console.log(`🔍 RAG [Atlas Vector Search]: Query "${query.slice(0, 40)}..." matched ${results.length} docs.`);
+      return results.map((doc) => ({
+        text: doc.text,
+        category: doc.category,
+        shopId: doc.shopId,
+        similarity: doc.score || 1.0,
+      }));
+    }
+  } catch (err) {
+    console.warn(
+      "⚠️ RAG [Atlas Vector Search Fallback Alert]: Native Atlas Search unavailable or not yet built. " +
+        "Using high-precision local cosine similarity search instead. Detail:",
+      err.message
+    );
+  }
+
+  // Step 3 (Fallback): Load all stored document embeddings from MongoDB
   const allDocs = await EmbeddingDoc.find({});
 
   if (allDocs.length === 0) {
@@ -282,22 +353,22 @@ export async function retrieveRelevantChunks(query, topK = 3) {
     return [];
   }
 
-  // Step 3: Score each document using cosine similarity
+  // Step 4: Score each document using cosine similarity
   const scored = allDocs.map((doc) => ({
     text: doc.text,
     category: doc.category,
+    shopId: doc.shopId,
     similarity: cosineSimilarity(queryEmbedding, doc.embedding),
   }));
 
-  // Step 4: Sort descending by similarity score (best match first)
+  // Step 5: Sort descending by similarity score (best match first)
   scored.sort((a, b) => b.similarity - a.similarity);
 
-  // Step 5: Return only the top-K results
-  // In a real system you might also filter: similarity > 0.5 (relevance threshold)
+  // Step 6: Return only the top-K results
   const topChunks = scored.slice(0, topK);
 
   console.log(
-    `🔍 RAG: Query "${query.slice(0, 40)}..." → Top matches:`,
+    `🔍 RAG [Cosine Fallback]: Query "${query.slice(0, 40)}..." → Top matches:`,
     topChunks.map((c) => `[${c.similarity.toFixed(3)}] ${c.text.slice(0, 50)}`)
   );
 

@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import connectDB from "./config/db.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import authRoutes from "./routes/authRoutes.js";
 import foodRoutes from "./routes/foodRoutes.js";
@@ -13,7 +15,9 @@ import shopRoutes from "./routes/shopRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import { buildAndIndexChunks } from "./services/ragService.js";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, ".env") });
 const app = express();
 
 // CORS configuration: allow the deployed frontend and local dev origins
