@@ -16,14 +16,12 @@ import MyBookings from "./pages/MyBookings.jsx";
 import ShopOwnerDashboard from "./pages/shopOwner/ShopOwnerDashboard.jsx";
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import AIChatBot from "./components/AIChatBot.jsx";
-import CookieCheckModal from "./components/CookieCheckModal.jsx";
 
 export default function App() {
   return (
     <AuthProvider>
       <Router>
         <Navbar />
-        <CookieCheckWrapper />
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
@@ -68,17 +66,9 @@ export default function App() {
   );
 }
 
-function CookieCheckWrapper() {
-  const context = useContext(AuthContext);
-  if (!context) return null;
-  const { cookiesBlocked } = context;
-  return <CookieCheckModal isOpen={cookiesBlocked} />;
-}
-
 
 function CustomerOnly({ children }) {
-  const context = useContext(AuthContext);
-  const role = context?.role;
+  const { role } = useContext(AuthContext);
   const effectiveRole = role || localStorage.getItem("role") || "customer";
   if (effectiveRole === "shop_owner") return <Navigate to="/shop-owner" replace />;
   if (effectiveRole === "admin") return <Navigate to="/admin" replace />;
