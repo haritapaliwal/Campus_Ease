@@ -7,7 +7,9 @@ export const AuthProvider = ({ children }) => {
   const [role, setRole] = useState(localStorage.getItem("role") || "customer");
   const [shopId, setShopId] = useState(localStorage.getItem("shopId") || null);
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("role"));
-  const [cookiesBlocked, setCookiesBlocked] = useState(false);
+  const [cookiesBlocked, setCookiesBlocked] = useState(
+    localStorage.getItem("cookies_blocked") === "true"
+  );
 
   // Sync with localStorage changes (e.g., from other tabs or after token removal)
   // Sync with localStorage changes (for role/shopId persistence)
@@ -35,24 +37,35 @@ export const AuthProvider = ({ children }) => {
         const res = await api.post("/auth/cookie-test-verify");
         if (res.data && res.data.allowed === false) {
           setCookiesBlocked(true);
+          localStorage.setItem("cookies_blocked", "true");
         } else {
           setCookiesBlocked(false);
+          localStorage.removeItem("cookies_blocked");
+          // Clean up fallback token if cookies are now allowed
+          localStorage.removeItem("token");
         }
       } catch (err) {
         console.error("Third-party cookie check failed:", err);
-        setCookiesBlocked(false);
+        // On error, don't change states to maintain offline stability
       }
     };
     checkCookies();
   }, []);
 
-  const login = (jwtIgnored, userRole = "customer", userShopId = null) => {
+  const login = (jwtToken, userRole = "customer", userShopId = null) => {
     setRole(userRole);
     setShopId(userShopId);
     setIsLoggedIn(true);
     localStorage.setItem("role", userRole);
     if (userShopId) localStorage.setItem("shopId", userShopId);
     else localStorage.removeItem("shopId");
+
+    // If cookies are blocked (fallback active), save the token in localStorage
+    if (cookiesBlocked && jwtToken) {
+      localStorage.setItem("token", jwtToken);
+    } else {
+      localStorage.removeItem("token");
+    }
   };
 
   const logout = async () => {
@@ -65,6 +78,7 @@ export const AuthProvider = ({ children }) => {
       setRole("customer");
       setShopId(null);
       setIsLoggedIn(false);
+      localStorage.removeItem("token");
       localStorage.removeItem("role");
       localStorage.removeItem("shopId");
     }

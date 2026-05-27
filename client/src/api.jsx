@@ -18,8 +18,12 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  // We no longer need to manually set the Authorization header
-  // the browser will automatically include the HttpOnly cookie
+  // If cookies are blocked, the context fallback will store the token in localStorage.
+  // In that case, we automatically inject it into the Authorization header.
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 }, (error) => {
   return Promise.reject(error);
@@ -31,6 +35,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Session expired or invalid
+      localStorage.removeItem("token");
       localStorage.removeItem("role");
       localStorage.removeItem("shopId");
       // Don't redirect automatically, let the component handle it

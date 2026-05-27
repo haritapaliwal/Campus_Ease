@@ -81,7 +81,7 @@ export default function SignupPage() {
     try {
       // Signup already sets the auth cookie and returns { id, role }
       const res = await api.post("/auth/signup", { studentId, email, password });
-      login(null, res.data.role, res.data.shopId ?? null);
+      login(res.data.token, res.data.role, res.data.shopId ?? null);
       toast.success("Account created successfully! Welcome!");
       navigate("/");
     } catch (err) {

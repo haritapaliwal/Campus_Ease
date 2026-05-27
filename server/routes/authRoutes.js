@@ -25,7 +25,7 @@ router.post("/signup", async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
-    res.json({ id: user._id, role: user.role });
+    res.json({ id: user._id, role: user.role, token });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -54,7 +54,7 @@ router.post("/login", async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
-    res.json({ role: user.role, shopId: user.shopId });
+    res.json({ role: user.role, shopId: user.shopId, token });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
