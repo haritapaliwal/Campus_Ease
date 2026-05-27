@@ -17,10 +17,11 @@ router.post("/signup", async (req, res) => {
     const token = jwt.sign({ id: user._id, role: user.role, shopId: null }, process.env.JWT_SECRET, { expiresIn: "7d" });
     
     // Set cookie
+    const isProduction = process.env.NODE_ENV === "production";
     res.cookie("token", token, {
       httpOnly: true,
-      secure: true,
-      sameSite: "none",
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
@@ -45,10 +46,11 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign({ id: user._id, role: user.role, shopId: user.shopId || null }, process.env.JWT_SECRET, { expiresIn: "7d" });
     
     // Set cookie
+    const isProduction = process.env.NODE_ENV === "production";
     res.cookie("token", token, {
       httpOnly: true,
-      secure: true,
-      sameSite: "none",
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
@@ -60,11 +62,32 @@ router.post("/login", async (req, res) => {
 
 // Logout
 router.post("/logout", (req, res) => {
+  const isProduction = process.env.NODE_ENV === "production";
   res.clearCookie("token", {
-    secure: true,
-    sameSite: "none"
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax"
   });
   res.status(200).json({ message: "Logged out successfully" });
+});
+
+// Third-party cookie check endpoints
+router.post("/cookie-test-set", (req, res) => {
+  const isProduction = process.env.NODE_ENV === "production";
+  res.cookie("cookie_test", "active", {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    maxAge: 5 * 60 * 1000 // 5 minutes
+  });
+  res.json({ success: true, message: "Cookie test initialized" });
+});
+
+router.post("/cookie-test-verify", (req, res) => {
+  if (req.cookies?.cookie_test === "active") {
+    res.json({ allowed: true });
+  } else {
+    res.json({ allowed: false });
+  }
 });
 
 export default router;

@@ -16,12 +16,14 @@ import MyBookings from "./pages/MyBookings.jsx";
 import ShopOwnerDashboard from "./pages/shopOwner/ShopOwnerDashboard.jsx";
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import AIChatBot from "./components/AIChatBot.jsx";
+import CookieCheckModal from "./components/CookieCheckModal.jsx";
 
 export default function App() {
   return (
     <AuthProvider>
       <Router>
         <Navbar />
+        <CookieCheckWrapper />
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
@@ -64,6 +66,11 @@ export default function App() {
       </Router>
     </AuthProvider>
   );
+}
+
+function CookieCheckWrapper() {
+  const { cookiesBlocked } = useContext(AuthContext);
+  return <CookieCheckModal isOpen={cookiesBlocked} />;
 }
 
 

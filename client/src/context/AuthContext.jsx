@@ -6,6 +6,7 @@ export const AuthProvider = ({ children }) => {
   const [role, setRole] = useState(localStorage.getItem("role") || "customer");
   const [shopId, setShopId] = useState(localStorage.getItem("shopId") || null);
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("role"));
+  const [cookiesBlocked, setCookiesBlocked] = useState(false);
 
   // Sync with localStorage changes (e.g., from other tabs or after token removal)
   // Sync with localStorage changes (for role/shopId persistence)
@@ -22,6 +23,28 @@ export const AuthProvider = ({ children }) => {
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
   }, [role, shopId]);
+
+  // Check if third-party cookies are blocked by browser settings
+  useEffect(() => {
+    const checkCookies = async () => {
+      try {
+        const api = (await import("../api")).default;
+        // Step 1: Set test cookie
+        await api.post("/auth/cookie-test-set");
+        // Step 2: Verify test cookie
+        const res = await api.post("/auth/cookie-test-verify");
+        if (res.data && res.data.allowed === false) {
+          setCookiesBlocked(true);
+        } else {
+          setCookiesBlocked(false);
+        }
+      } catch (err) {
+        console.error("Third-party cookie check failed:", err);
+        setCookiesBlocked(false);
+      }
+    };
+    checkCookies();
+  }, []);
 
   const login = (jwtIgnored, userRole = "customer", userShopId = null) => {
     setRole(userRole);
@@ -60,7 +83,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ token: isLoggedIn ? "present" : null, role, shopId, isLoggedIn, login, logout, refreshToken }}>
+    <AuthContext.Provider value={{ token: isLoggedIn ? "present" : null, role, shopId, isLoggedIn, login, logout, refreshToken, cookiesBlocked }}>
       {children}
     </AuthContext.Provider>
   );
