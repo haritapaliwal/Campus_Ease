@@ -20,7 +20,7 @@
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
-- [AI Chatbot — How RAG Works](#ai-chatbot--how-rag-works)
+- [AI Chatbot — How RAG & Action Placement Work](#ai-chatbot--how-rag--action-placement-work)
 - [User Roles](#user-roles)
 - [API Endpoints](#api-endpoints)
 - [Project Structure](#project-structure)
@@ -57,6 +57,13 @@ The platform also features an **AI-powered chatbot** that answers natural langua
 - 👥 **User Management** — View all registered students and shop owners
 - 🏬 **Shop Oversight** — Monitor all active shops across all categories
 - ⚙️ **Platform Control** — Manage shop status (active/inactive)
+
+### 🚀 Advanced AI & System Features
+- 🤖 **Interactive AI-Driven Orders & Bookings** — Custom interactive confirmation cards are rendered directly inside the chatbot window for canteen orders, barber bookings, and laundry pickups, enabling students to review details and place requests with a single click.
+- 💬 **Conversational Action Execution** — Powered by a unified cognitive LLM engine that parses user intent and allows users to confirm bookings or orders conversationally (e.g., *"yes"*, *"confirm"*, *"go ahead"*) or cancel them instantly.
+- ⚙️ **Robust Server-Side DB Resolver** — Automatically translates conversational text mentions of shops and items into their actual MongoDB `ObjectIds` and exact catalog prices, eliminating database reference exceptions and ensuring complete pricing security.
+- 🔍 **Hybrid Vector Search Space** — Features programmatic initialization of a MongoDB Atlas Vector Search index (`vector_index`), automatically falling back to high-precision in-memory cosine similarity search when running in local development environments.
+- 📦 **Automated Multi-Shop Routing** — Correctly groups and splits food order items by their respective canteens under the hood, ensuring separate shop dashboards receive only their corresponding orders.
 
 ---
 
@@ -120,28 +127,30 @@ The platform also features an **AI-powered chatbot** that answers natural langua
 
 ---
 
-## AI Chatbot — How RAG Works
+## AI Chatbot — How RAG & Action Placement Work
 
-The chatbot uses a custom **Retrieval-Augmented Generation (RAG)** pipeline — no third-party vector database required.
+The chatbot uses a custom **Retrieval-Augmented Generation (RAG)** pipeline integrated with an interactive action-placement protocol and a server-side DB resolver.
 
 ### Phase 1 — Indexing (on server startup)
-1. Fetches all active shops from MongoDB
-2. Converts each shop's data (menu, slots, catalog) into a human-readable text chunk
-3. Calls the **Gemini Embedding API** to convert each chunk into a 768-dimensional vector
-4. Stores `{ text, vector, shopId }` in the `EmbeddingDoc` MongoDB collection
+1. **DB Context Extraction**: Fetches all active shops from MongoDB.
+2. **Chunk Generation**: Converts each shop's data (menus, slots, laundry catalog) into human-readable text chunks.
+3. **Vector Embedding**: Calls the **Gemini Embedding API** (`gemini-embedding-001`) with `outputDimensionality: 768` to convert each chunk into a 768-dimensional vector.
+4. **Vector Store**: Programmatically checks and indexes the search space using native **MongoDB Atlas Vector Search** (`vector_index`), storing the payload in the `EmbeddingDoc` collection.
 
-### Phase 2 — Retrieval (on user question)
-1. Embeds the user's question using the `RETRIEVAL_QUERY` task type
-2. Loads all stored document vectors from MongoDB
-3. Computes **cosine similarity** between the query vector and every document vector
-4. Returns the top-3 most semantically relevant chunks
+### Phase 2 — Hybrid Retrieval (on user question)
+1. **Query Embedding**: Embeds the user's question using the `RETRIEVAL_QUERY` task type.
+2. **Atlas Vector Search**: Executes high-speed semantic retrieval using native MongoDB `$vectorSearch` aggregation to obtain closest neighbors.
+3. **Local Cosine Fallback**: Automatically falls back to high-precision in-memory cosine similarity calculation over all stored embeddings if running in a non-Atlas environment.
+4. Returns the top-3 most semantically relevant chunks.
 
-### Phase 3 — Generation (Groq / LLaMA 3)
-1. Injects the retrieved chunks as context into a prompt
-2. Sends to **Groq's LLaMA 3** API for fast, accurate answer generation
-3. Streams the response back to the user in the chat UI
-
-This approach means the AI actually *knows* what's on the canteen menu today, which barber slots are open, and what the laundry pricing is — without any hallucination.
+### Phase 3 — Unified Cognitive Generation (Groq / LLaMA 3)
+1. **Context & Live Catalog Injection**: Injects the retrieved chunks along with the live inventory catalog as system context into the conversation history prompt.
+2. **Intent Classification & Proposal Output**: Calls **Groq's LLaMA 3** (`llama-3.3-70b-versatile`) in JSON mode to output a conversational reply, user intent classification (`canteen` | `barber` | `laundry` | `cancel` | `chat`), and structured order/booking parameters (`proposal`).
+3. **DB Resolver Interface**: Intercepts proposal-bearing replies on the server side to resolve colloquial text shop/item names to exact MongoDB `ObjectIds` and catalog prices, maintaining complete data and transaction security.
+4. **Interactive Cards & Placement Execution**:
+   - For queries asking about services: Displays an interactive, custom-themed proposal card directly in the chat UI.
+   - For confirmations (e.g., *"yes"*, *"confirm"*): Renders the card, marks `executePlacement` as true, and invokes corresponding shop order/booking REST APIs automatically.
+   - Updates the card dynamically on the frontend through loading, error/retry, and success states while returning the final confirmation IDs.
 
 ---
 
