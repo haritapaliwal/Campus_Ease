@@ -69,13 +69,16 @@ export default function App() {
 }
 
 function CookieCheckWrapper() {
-  const { cookiesBlocked } = useContext(AuthContext);
+  const context = useContext(AuthContext);
+  if (!context) return null;
+  const { cookiesBlocked } = context;
   return <CookieCheckModal isOpen={cookiesBlocked} />;
 }
 
 
 function CustomerOnly({ children }) {
-  const { role } = useContext(AuthContext);
+  const context = useContext(AuthContext);
+  const role = context?.role;
   const effectiveRole = role || localStorage.getItem("role") || "customer";
   if (effectiveRole === "shop_owner") return <Navigate to="/shop-owner" replace />;
   if (effectiveRole === "admin") return <Navigate to="/admin" replace />;

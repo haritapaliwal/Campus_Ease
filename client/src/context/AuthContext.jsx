@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect } from "react";
+import api from "../api";
 
 export const AuthContext = createContext();
 
@@ -28,7 +29,6 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkCookies = async () => {
       try {
-        const api = (await import("../api")).default;
         // Step 1: Set test cookie
         await api.post("/auth/cookie-test-set");
         // Step 2: Verify test cookie
@@ -58,7 +58,6 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       // Call backend to clear the cookie
-      const api = (await import("../api")).default;
       await api.post("/auth/logout");
     } catch (err) {
       console.error("Logout failed", err);
