@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import Shop from "../models/Shop.js";
 import Order from "../models/Order.js";
 import authMiddleware from "../middleware/authMiddleware.js";
@@ -19,23 +20,45 @@ router.post("/order", authMiddleware, async (req, res) => {
   }
   try {
     const grouped = items.reduce((acc, item) => {
-      const shopName = item.shop || "Unknown Shop";
-      acc[shopName] = acc[shopName] || [];
-      acc[shopName].push(item);
+      const shopId = item.shopId;
+      if (!shopId) {
+        throw new Error(`Missing shopId for item: ${item.item}`);
+      }
+      acc[shopId] = acc[shopId] || [];
+      acc[shopId].push(item);
       return acc;
     }, {});
 
     const createdOrders = [];
-    for (const [shopName, shopItems] of Object.entries(grouped)) {
-      const shopDoc = await Shop.findOne({ name: shopName });
-      const normalizedItems = shopItems.map((it) => ({
-        item: it.item,
-        price: Number(it.price) || 0,
-        shop: shopName,
-      }));
+    for (const [shopId, shopItems] of Object.entries(grouped)) {
+      if (!mongoose.Types.ObjectId.isValid(shopId)) {
+        return res.status(400).json({ message: `Invalid shopId: ${shopId}` });
+      }
+      const shopDoc = await Shop.findById(shopId);
+      if (!shopDoc) {
+        return res.status(404).json({ message: `Shop with ID ${shopId} not found` });
+      }
+
+      const normalizedItems = [];
+      for (const it of shopItems) {
+        const officialItem = shopDoc.menu.find((menuItem) => menuItem.item === it.item);
+        if (!officialItem) {
+          throw new Error(`Item ${it.item} does not exist in the menu of ${shopDoc.name}`);
+        }
+        
+        const qty = Number(it.quantity) || 1;
+        for (let i = 0; i < qty; i++) {
+          normalizedItems.push({
+            item: officialItem.item,
+            price: officialItem.price, // Lock: Uses the secure database price!
+            shop: shopDoc.name,
+          });
+        }
+      }
+
       const order = await Order.create({
         userId: req.user,
-        shopId: shopDoc ? shopDoc._id : null,
+        shopId: shopDoc._id, // Lock: Uses verified, non-null shop ObjectId!
         items: normalizedItems,
         orderType,
       });

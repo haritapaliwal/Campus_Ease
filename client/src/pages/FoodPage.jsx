@@ -54,6 +54,7 @@ export default function FoodPage() {
                 shop: it.shop,
                 item: it.item,
                 price: it.price,
+                shopId: order.shopId,
               });
             });
           });
@@ -80,7 +81,7 @@ export default function FoodPage() {
       // Identify items by shop + name + price (since prices may vary per shop)
       const existingIndex = prevCart.findIndex(
         (cartItem) =>
-          cartItem.shop === shopName &&
+          (cartItem.shopId === item.shopId || cartItem.shop === shopName) &&
           cartItem.item === item.item &&
           cartItem.price === item.price
       );
@@ -150,7 +151,7 @@ export default function FoodPage() {
     : shops.filter(shop => shop.name === activeShop);
 
   const filteredItems = filteredShops.flatMap(shop => 
-    shop.menu.map(item => ({ ...item, shop: shop.name, shopId: shop.id }))
+    shop.menu.map(item => ({ ...item, shop: shop.name, shopId: shop._id || shop.id }))
   ).filter(item => 
     item.item.toLowerCase().includes(searchTerm.toLowerCase())
   );
