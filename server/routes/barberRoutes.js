@@ -85,6 +85,17 @@ router.post("/book", authMiddleware, async (req, res) => {
     const targetDate = new Date(bookingDate);
     targetDate.setHours(0, 0, 0, 0);
 
+    // Check if the user already has an active booking at the same date and time slot
+    const existingBooking = await BarberBooking.findOne({
+      userId: req.user,
+      bookingDate: targetDate,
+      slot,
+      status: { $nin: ["cancelled", "rejected", "completed"] }
+    });
+    if (existingBooking) {
+      return res.status(400).json({ message: "You already have an active booking for this date and time slot" });
+    }
+
     // 1. Static/Manual availability check (same as before)
     const shop = await Shop.findOne({ _id: shopId, category: "barber" });
     if (!shop) return res.status(404).json({ message: "Barber shop not found" });
@@ -179,6 +190,9 @@ router.put("/:id", authMiddleware, async (req, res) => {
 
     // We only allow status updates for now to keep slot consistency simple
     if (status) {
+      if (status !== "cancelled") {
+        return res.status(403).json({ message: "Only cancellation is allowed for customers" });
+      }
       booking.status = status;
     }
     
