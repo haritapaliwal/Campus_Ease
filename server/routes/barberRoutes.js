@@ -26,19 +26,19 @@ router.get("/slots", async (req, res) => {
   const endOfDay = new Date(targetDate);
   endOfDay.setHours(23, 59, 59, 999);
   
-  // Exclude cancelled, rejected, and completed bookings from slot count
-  // Only count bookings for the specific date
-  // Completed bookings free up the slot for new customers
-  const bookings = await BarberBooking.find({ 
-    status: { $nin: ["cancelled", "rejected", "completed"] },
+  // Query only the pre-compiled SlotCounter collection
+  const counters = await SlotCounter.find({
     bookingDate: { $gte: targetDate, $lte: endOfDay },
     ...(shopId ? { shopId } : {})
   });
-  const bookingCounts = bookings.reduce((acc, booking) => {
-    if (!booking.slot) return acc;
-    acc[booking.slot] = (acc[booking.slot] || 0) + 1;
-    return acc;
-  }, {});
+  
+  // Map the counters into a simple key-value object
+  const bookingCounts = {};
+  counters.forEach(c => {
+    if (c.slot) {
+      bookingCounts[c.slot] = c.count;
+    }
+  });
 
   // gather dynamic slots from shops
   const shops = await Shop.find({ category: "barber", ...(shopId ? { _id: shopId } : {}) });
