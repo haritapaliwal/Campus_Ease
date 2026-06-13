@@ -140,6 +140,7 @@ export async function resolveProposalIds(reply) {
                 price: menuEntry ? menuEntry.price : (item.price || 0),
                 quantity: Number(item.quantity) || 1,
                 shop: matchingShop ? matchingShop.name : (item.shop || shop.name),
+                shopId: matchingShop ? matchingShop._id.toString() : (item.shopId || payload.shopId || shop._id.toString())
               });
             }
             payload.items = resolvedItems;
@@ -272,7 +273,13 @@ async function buildCanteenProposal(query, messages = []) {
       const shopGroups = {};
       for (const it of matchedItems) {
         if (!shopGroups[it.shopName]) shopGroups[it.shopName] = { shopId: it.shopId, shopName: it.shopName, items: [] };
-        shopGroups[it.shopName].items.push({ item: it.item, price: it.price, quantity: it.quantity, shop: it.shopName });
+        shopGroups[it.shopName].items.push({ 
+          item: it.item, 
+          price: it.price, 
+          quantity: it.quantity, 
+          shop: it.shopName,
+          shopId: it.shopId
+        });
       }
       const bestGroup = Object.values(shopGroups).sort((a, b) => b.items.length - a.items.length)[0];
 

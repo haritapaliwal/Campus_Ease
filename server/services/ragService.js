@@ -153,26 +153,41 @@ function cosineSimilarity(vecA, vecB) {
  */
 async function getEmbedding(text, taskType = "RETRIEVAL_DOCUMENT") {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY; // read at call-time, not module-load-time
-  const response = await fetch(`${GEMINI_EMBEDDING_URL}?key=${GEMINI_API_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      // ✅ Do NOT include "model" here — it's already in the URL path.
-      // Including it in BOTH the URL and body causes a 404 conflict.
-      content: { parts: [{ text }] },
-      taskType,
-      outputDimensionality: 768,
-    }),
-  });
+  let retries = 3;
+  let delay = 1000;
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Gemini Embedding API error: ${err}`);
+  while (retries > 0) {
+    try {
+      const response = await fetch(`${GEMINI_EMBEDDING_URL}?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // ✅ Do NOT include "model" here — it's already in the URL path.
+          // Including it in BOTH the URL and body causes a 404 conflict.
+          content: { parts: [{ text }] },
+          taskType,
+          outputDimensionality: 768,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Gemini Embedding API error: ${err}`);
+      }
+
+      const data = await response.json();
+      // The API returns: { embedding: { values: [0.023, -0.41, 0.88, ...] } }
+      return data.embedding.values;
+    } catch (err) {
+      retries--;
+      if (retries === 0) throw err;
+      console.warn(
+        `⚠️ RAG: Embedding fetch failed (Error: ${err.message}). Retrying in ${delay}ms... (${retries} retries left)`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay *= 2;
+    }
   }
-
-  const data = await response.json();
-  // The API returns: { embedding: { values: [0.023, -0.41, 0.88, ...] } }
-  return data.embedding.values;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
