@@ -197,6 +197,7 @@ export default function AIChatBot() {
               item: it.item || it.name,
               price: Number(it.price) || 0,
               shop: it.shop || payload.shopName,
+              shopId: it.shopId || payload.shopId,
             });
           }
         });
