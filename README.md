@@ -145,7 +145,7 @@ The chatbot uses a custom **Retrieval-Augmented Generation (RAG)** pipeline inte
 
 ### Phase 3 — Unified Cognitive Generation (Groq / LLaMA 3)
 1. **Context & Live Catalog Injection**: Injects the retrieved chunks along with the live inventory catalog as system context into the conversation history prompt.
-2. **Intent Classification & Proposal Output**: Calls **Groq's LLaMA 3** (`llama-3.3-70b-versatile`) in JSON mode to output a conversational reply, user intent classification (`canteen` | `barber` | `laundry` | `cancel` | `chat`), and structured order/booking parameters (`proposal`).
+2. **Intent Classification & Proposal Output**: Calls **Groq LLM** (`qwen/qwen3.8-27b` / `openai/gpt-oss-120b`, configurable via `GROQ_MODEL`) in JSON mode to output a conversational reply, user intent classification (`canteen` | `barber` | `laundry` | `cancel` | `chat`), and structured order/booking parameters (`proposal`).
 3. **DB Resolver Interface**: Intercepts proposal-bearing replies on the server side to resolve colloquial text shop/item names to exact MongoDB `ObjectIds` and catalog prices, maintaining complete data and transaction security.
 4. **Interactive Cards & Placement Execution**:
    - For queries asking about services: Displays an interactive, custom-themed proposal card directly in the chat UI.

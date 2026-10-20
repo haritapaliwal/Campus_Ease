@@ -12,7 +12,12 @@ import Shop from "../models/Shop.js";
 const router = express.Router();
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+const GROQ_FALLBACK_MODELS = [
+  "qwen/qwen3.8-27b",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "llama-3.3-70b-versatile",
+];
 
 /**
  * Robust character-by-character brace tracker to extract JSON blocks
@@ -578,7 +583,7 @@ router.post("/chat", authMiddleware, async (req, res) => {
       `3. Cancellations (e.g. "cancel", "no", "forget it"): If the user cancels, set "intent" to "cancel", "proposal" to null, "executePlacement" to false, and reply with a clean cancellation confirmation.\n` +
       `4. Casual Chat: If the user is just chatting or asking factual questions, set "intent" to "chat", "proposal" to null, "executePlacement" to false, and answer using CAMPUS CONTEXT DATA.\n`;
 
-    // STEP 5: Call Groq in JSON Mode
+    // STEP 5: Call Groq in JSON Mode (with candidate model fallback)
     const groqMessages = [
       { role: "system", content: systemPrompt },
       ...messages.map((m) => ({
@@ -587,28 +592,50 @@ router.post("/chat", authMiddleware, async (req, res) => {
       })),
     ];
 
-    const groqResponse = await fetch(GROQ_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: groqMessages,
-        temperature: 0.2,
-        max_tokens: 600,
-        response_format: { type: "json_object" },
-      }),
-    });
+    const modelsToTry = Array.from(
+      new Set([process.env.GROQ_MODEL, ...GROQ_FALLBACK_MODELS].filter(Boolean))
+    );
 
-    if (!groqResponse.ok) {
-      const errText = await groqResponse.text();
-      console.error("Groq API error in Unified model:", errText);
+    let groqData = null;
+    let successfulModel = null;
+    let lastErrorText = "";
+
+    for (const model of modelsToTry) {
+      try {
+        const groqResponse = await fetch(GROQ_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: groqMessages,
+            temperature: 0.2,
+            max_tokens: 600,
+            response_format: { type: "json_object" },
+          }),
+        });
+
+        if (groqResponse.ok) {
+          groqData = await groqResponse.json();
+          successfulModel = model;
+          break;
+        } else {
+          lastErrorText = await groqResponse.text();
+          console.warn(`Groq model "${model}" failed (${groqResponse.status}): ${lastErrorText}. Trying fallback...`);
+        }
+      } catch (reqErr) {
+        lastErrorText = reqErr.message;
+        console.warn(`Groq request error on model "${model}": ${reqErr.message}. Trying fallback...`);
+      }
+    }
+
+    if (!groqData) {
+      console.error("Groq API error in Unified model (all models failed):", lastErrorText);
       return res.status(502).json({ message: "AI service error. Please try again." });
     }
 
-    const groqData = await groqResponse.json();
     const jsonStr = groqData?.choices?.[0]?.message?.content || "{}";
 
     let parsedRes;
